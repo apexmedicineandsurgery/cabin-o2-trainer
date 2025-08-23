@@ -1,491 +1,439 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Cabin Pressurization + O₂ Trainer</title>
 <style>
   :root{
-    --bg:#0e1116;
-    --panel:#151a22;
-    --ink:#e6ebf2;
-    --muted:#9aa4b2;
-    --accent:#66d9e8;
-    --green:#33d17a;
-    --yellow:#f6c644;
-    --orange:#ff9933;
-    --red:#ff5d5d;
-    --card:#0f131a;
-    --border:#242b36;
+    --bg:#0f1220;
+    --panel:#151a2f;
+    --accent:#6ee7ff;
+    --accent2:#a2f39b;
+    --warn:#ffb84d;
+    --danger:#ff6b6b;
+    --text:#e5e7ef;
+    --muted:#9aa0b4;
+    --good:#3ddc97;
   }
   *{box-sizing:border-box}
-  html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
-  h1,h2,h3{margin:0 0 .5rem}
-  h1{font-size:1.25rem;letter-spacing:.2px}
-  h2{font-size:1.05rem;color:var(--muted);font-weight:600}
-  h3{font-size:.95rem;color:var(--muted);font-weight:600}
-  .wrap{max-width:1200px;margin:0 auto;padding:16px}
-  .grid{display:grid;gap:16px}
-  .cols-3{grid-template-columns:repeat(3,1fr)}
-  .cols-2{grid-template-columns:repeat(2,1fr)}
-  .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px}
-  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-  .stack{display:flex;flex-direction:column;gap:8px}
-  label{font-size:.9rem;color:var(--muted)}
-  input[type="range"]{width:100%}
-  input[type="number"],select{
-    width:100%; background:var(--card); color:var(--ink);
-    border:1px solid var(--border); border-radius:8px; padding:8px;
+  body{
+    margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    color:var(--text); background:linear-gradient(180deg, #0c1020, #0a0d19);
   }
-  .small{font-size:.85rem;color:var(--muted)}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px}
-  .kv{display:grid;grid-template-columns:1fr auto;gap:6px;margin:6px 0}
-  .kv .k{color:var(--muted)}
-  .kv .v{font-variant-numeric:tabular-nums}
-  .band{border-radius:8px;padding:10px 12px;border:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px}
-  .chip{border-radius:999px;padding:2px 10px;border:1px solid var(--border);background:rgba(255,255,255,0.03)}
-  .risk-min{background:rgba(51,209,122,.1)}
-  .risk-low{background:rgba(102,217,232,.08)}
-  .risk-mod{background:rgba(246,198,68,.12)}
-  .risk-inc{background:rgba(255,153,51,.12)}
-  .risk-high{background:rgba(255,93,93,.12)}
-  .btn{
-    background:linear-gradient(180deg,#1f2733,#18202b);
-    color:var(--ink); border:1px solid var(--border); border-radius:10px;
-    padding:8px 12px; cursor:pointer;
+  header{
+    padding:16px 20px; border-bottom:1px solid #202641; position:sticky; top:0; background:#0b0e1b; z-index:5;
   }
-  .btn.ghost{background:transparent}
-  .btn:disabled{opacity:.5;cursor:not-allowed}
-  .row.wrap > *{flex:1 1 180px}
-  .help{color:var(--muted);font-size:.85rem}
-  .divider{height:1px;background:var(--border);margin:10px 0}
-  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  @media (max-width:1050px){ .cols-3{grid-template-columns:1fr} .cols-2{grid-template-columns:1fr}}
+  header h1{margin:0; font-size:20px; letter-spacing:0.4px}
+  header p{margin:6px 0 0; color:var(--muted); font-size:13px}
+  .wrap{max-width:1200px; margin:0 auto; padding:16px}
+  .grid{display:grid; gap:16px; grid-template-columns: repeat(12, 1fr);}
+  .card{background:var(--panel); border:1px solid #202641; border-radius:12px; padding:16px;}
+  .span-12{grid-column: span 12}
+  .span-8{grid-column: span 8}
+  .span-6{grid-column: span 6}
+  .span-4{grid-column: span 4}
+  @media (max-width: 960px){ .span-8,.span-6,.span-4{grid-column: span 12} }
+  h2{margin:0 0 8px 0; font-size:16px; color:#eaf0ff}
+  .row{display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end}
+  label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px}
+  input[type=number], select, input[type=range]{
+    width:100%; padding:10px 12px; border-radius:8px; border:1px solid #2a3157; background:#0f142a; color:var(--text);
+    outline:none;
+  }
+  input[type=range]{padding:0; height:28px}
+  .inline{display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px}
+  .kv{display:flex; align-items:baseline; gap:8px; margin:6px 0;}
+  .mmhg{font-size:28px; font-weight:700; letter-spacing:0.3px;}
+  .psi{font-size:13px; color:var(--muted);}
+  .subtext{font-size:12px; color:var(--muted)}
+  .badge{display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid #2a3157; color:#b7c1ff;}
+  .good{color:var(--good)}
+  .warn{color:var(--warn)}
+  .danger{color:var(--danger)}
+  .accent{color:var(--accent)}
+  .accent2{color:var(--accent2)}
+  .divider{height:1px; background:#202641; margin:12px 0}
+  .stack{display:grid; gap:8px}
+  .muted{color:var(--muted)}
+  .status-chip{
+    display:inline-flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; border:1px solid #2a3157; background:#0f142a; font-size:13px;
+  }
+  .row > div{flex:1; min-width:180px}
+  .note{font-size:12px; color:var(--muted); margin-top:6px}
+  .strong{font-weight:600}
+  .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace}
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="row" style="align-items:flex-end;justify-content:space-between">
-      <div>
-        <h1>Cabin Pressurization + O₂ Trainer</h1>
-        <div class="small">Model pressurization behavior, continuous-flow O₂ delivery, Henry’s law, and DCS tissue ratio risk.</div>
-      </div>
+<header>
+  <h1>Cabin Pressurization + O₂ Delivery Trainer</h1>
+  <p>Realistic pressurization modes, mmHg-first display, sea-level O₂ comparators, mask overpressure teaching, and hypoxia alarms.</p>
+</header>
+
+<div class="wrap">
+  <div class="grid">
+
+    <!-- Controls -->
+    <section class="card span-12">
+      <h2>Controls</h2>
       <div class="row">
-        <button id="btnStart" class="btn">Start</button>
-        <button id="btnPause" class="btn ghost" disabled>Pause</button>
-        <button id="btnResetTissue" class="btn ghost">Reset Tissue to Equilibrium</button>
-      </div>
-    </div>
-
-    <div class="grid cols-3" style="margin-top:16px">
-      <!-- Aircraft / Pressurization -->
-      <div class="panel stack">
-        <h2>Aircraft and Pressurization</h2>
-        <div class="stack">
-          <label>Aircraft Type</label>
-          <select id="aircraftType">
-            <option value="commercial">Commercial airliner</option>
-            <option value="tactical">Tactical jet</option>
-            <option value="custom">Custom</option>
+        <div>
+          <label for="alt_m">Aircraft altitude (m)</label>
+          <input id="alt_m" type="number" value="0" min="0" max="30000" step="50" />
+          <div class="inline"><span id="alt_ft">0 ft</span></div>
+        </div>
+        <div>
+          <label for="press_profile">Pressurization mode</label>
+          <select id="press_profile">
+            <option value="failed" selected>Failed (cabin follows ambient)</option>
+            <option value="jet">Jet-style (hold setpoint when feasible)</option>
+            <option value="ramped">Commercial-style (ramped schedule)</option>
           </select>
-          <div class="help">Sets defaults for max ΔP, cabin altitude cap, and pressurization start.</div>
+          <div class="inline"><span class="badge">ΔP limit enforced (active modes)</span></div>
         </div>
-
-        <div class="stack">
-          <label>Aircraft Altitude (ft)</label>
-          <input id="acAlt" type="range" min="0" max="50000" step="100" value="0" />
-          <input id="acAltNum" type="number" min="0" max="50000" step="100" value="0" />
+        <div>
+          <label for="cabin_set_m">Cabin setpoint altitude (m)</label>
+          <input id="cabin_set_m" type="number" value="2400" min="0" max="5000" step="50" />
+          <div class="inline"><span id="cabin_set_ft">7,874 ft</span></div>
         </div>
-
-        <div class="stack">
-          <label>Pressurization Starts Above (ft)</label>
-          <input id="pressStart" type="range" min="0" max="20000" step="500" />
-          <input id="pressStartNum" type="number" min="0" max="20000" step="100" />
-          <div class="help">Below this altitude, cabin = ambient (no pressurization).</div>
-        </div>
-
-        <div class="stack">
-          <label>Max Differential Pressure ΔP (psi)</label>
-          <input id="dpMax" type="range" min="2" max="10" step="0.1" />
-          <input id="dpMaxNum" type="number" min="2" max="10" step="0.1" />
-          <div class="help">Upper limit: cabin pressure ≤ ambient + ΔP.</div>
-        </div>
-
-        <div class="stack">
-          <label>Cabin Altitude Cap (ft)</label>
-          <input id="capAlt" type="range" min="6000" max="20000" step="500" />
-          <input id="capAltNum" type="number" min="6000" max="20000" step="100" />
-          <div class="help">Target “at most” cabin altitude when ΔP allows.</div>
+        <div>
+          <label for="dPmax_psi">Max ΔP (psi)</label>
+          <input id="dPmax_psi" type="number" value="8" min="0" max="12" step="0.1" />
+          <div class="inline muted">Typical transport: 7–9 psi</div>
         </div>
       </div>
-
-      <!-- O2 Delivery -->
-      <div class="panel stack">
-        <h2>O₂ Delivery (Continuous Flow)</h2>
-        <div class="stack">
-          <label>O₂ Flow (L/min)</label>
-          <input id="o2Flow" type="range" min="0" max="15" step="0.1" value="0" />
-          <input id="o2FlowNum" type="number" min="0" max="15" step="0.1" value="0" />
+      <div class="divider"></div>
+      <div class="row">
+        <div>
+          <label for="o2_mode">O₂ delivery mode</label>
+          <select id="o2_mode">
+            <option value="pressure">Pressure-demand (mask overpressure applied)</option>
+            <option value="diluter">Diluter-demand (no overpressure)</option>
+            <option value="flow">Continuous flow (no overpressure)</option>
+          </select>
+          <div class="inline muted">PIO₂/PAO₂ use cabin pressure plus mask overpressure in pressure‑demand mode.</div>
         </div>
-        <div class="stack">
-          <label>Minute Ventilation (L/min)</label>
-          <input id="ve" type="range" min="4" max="30" step="0.5" value="8" />
-          <input id="veNum" type="number" min="4" max="30" step="0.5" value="8" />
-          <div class="help">Approximate effective alveolar mixing driver.</div>
+        <div>
+          <label for="fio2">O₂ fraction (FiO₂)</label>
+          <input id="fio2" type="number" value="0.21" min="0.21" max="1.0" step="0.01" />
+          <div class="inline"><span class="muted">0.21–1.00</span></div>
         </div>
-        <div class="stack">
-          <label>Mask Efficiency (0–1)</label>
-          <input id="eff" type="range" min="0" max="1" step="0.05" value="0.8" />
-          <input id="effNum" type="number" min="0" max="1" step="0.05" value="0.8" />
-          <div class="help">Delivery effectiveness (seal, fit, rebreathing).</div>
+        <div>
+          <label for="mask_over_mmHg">Mask overpressure (mmHg)</label>
+          <input id="mask_over_mmHg" type="number" value="0" min="0" max="200" step="1" />
+          <div class="inline muted">Pressure-demand only</div>
         </div>
-        <div class="stack">
-          <label>Baseline Cabin FiO₂</label>
-          <input id="fio2Cabin" type="range" min="0.2095" max="0.5" step="0.0005" value="0.2095" />
-          <input id="fio2CabinNum" type="number" min="0.2095" max="0.5" step="0.0005" value="0.2095" />
-          <div class="help">Assume dry air unless special mix.</div>
-        </div>
-      </div>
-
-      <!-- Tissue Model -->
-      <div class="panel stack">
-        <h2>Tissue N₂ Kinetics</h2>
-        <div class="stack">
-          <label>Compartment Half-time (min)</label>
-          <input id="tHalf" type="range" min="5" max="240" step="5" value="40" />
-          <input id="tHalfNum" type="number" min="5" max="240" step="5" value="40" />
-          <div class="help">Single-compartment exponential approach to PiN₂.</div>
-        </div>
-        <div class="stack">
-          <label>Sim Speed (x real-time)</label>
-          <input id="simSpeed" type="range" min="1" max="120" step="1" value="60" />
-          <input id="simSpeedNum" type="number" min="1" max="120" step="1" value="60" />
-        </div>
-        <div class="stack">
-          <label>Initialize Tissue State</label>
+        <div>
+          <label for="paco2">PaCO₂ (mmHg) · RQ</label>
           <div class="row">
-            <button id="btnSetSeaLevel" class="btn ghost">Set to Sea-Level Equilibrium</button>
-            <button id="btnSetCurrentEq" class="btn ghost">Set to Current Equilibrium</button>
+            <div><input id="paco2" type="number" value="40" min="20" max="60" step="1" /></div>
+            <div><input id="rq" type="number" value="0.8" min="0.7" max="1.0" step="0.05" /></div>
           </div>
-          <div class="help">Sea-level eq uses dry air baseline; Current eq uses computed PiN₂ now.</div>
+          <div class="inline muted">Alveolar gas equation parameters</div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- Outputs -->
-    <div class="grid cols-3" style="margin-top:16px">
-      <div class="card">
-        <h2>Environment</h2>
-        <div class="kv"><div class="k">Aircraft Altitude</div><div class="v"><span id="outAcAlt" class="mono">0</span> ft</div></div>
-        <div class="kv"><div class="k">Ambient Pressure</div><div class="v"><span id="outPAmb" class="mono">760.0</span> mmHg</div></div>
-        <div class="divider"></div>
-        <div class="kv"><div class="k">Cabin Altitude</div><div class="v"><span id="outCabAlt" class="mono">0</span> ft</div></div>
-        <div class="kv"><div class="k">Cabin Pressure</div><div class="v"><span id="outPCab" class="mono">760.0</span> mmHg</div></div>
-        <div class="kv"><div class="k">ΔP (cabin − ambient)</div><div class="v"><span id="outDP" class="mono">0.0</span> psi</div></div>
+    <!-- Ambient -->
+    <section class="card span-6">
+      <h2>Ambient (aircraft)</h2>
+      <div class="kv">
+        <div class="mmhg" id="amb_mmhg">760.00 mmHg</div>
+        <div class="psi" id="amb_psi">14.70 psi</div>
       </div>
-
-      <div class="card">
-        <h2>Inspired Gases (Tracheal)</h2>
-        <div class="kv"><div class="k">Effective FiO₂</div><div class="v"><span id="outFiO2" class="mono">0.2095</span></div></div>
-        <div class="kv"><div class="k">PiO₂</div><div class="v"><span id="outPiO2" class="mono">0.0</span> mmHg</div></div>
-        <div class="kv"><div class="k">PiN₂</div><div class="v"><span id="outPiN2" class="mono">0.0</span> mmHg</div></div>
-        <div class="kv"><div class="k">Henry’s Law: Relative Dissolved N₂</div><div class="v"><span id="outHenry" class="mono">1.00</span> × sea-level</div></div>
-        <div class="small">Relative dissolved N₂ scales with inspired N₂ partial pressure (educational visualization).</div>
+      <div class="subtext">
+        Altitude: <span id="amb_alt_m">0</span> m · <span id="amb_alt_ft2">0 ft</span>
       </div>
+    </section>
 
-      <div class="card">
-        <h2>Tissue N₂ + DCS Risk</h2>
-        <div class="kv"><div class="k">Tissue PN₂</div><div class="v"><span id="outTissueN2" class="mono">0.0</span> mmHg</div></div>
-        <div class="kv"><div class="k">Tissue Ratio (TR = PN₂ / Pambient)</div><div class="v"><span id="outTR" class="mono">1.00</span></div></div>
-        <div id="riskBand" class="band risk-min">
-          <div>
-            <div class="small">DCS Risk Band</div>
-            <div id="riskLabel" class="mono">Minimal</div>
+    <!-- Cabin -->
+    <section class="card span-6">
+      <h2>Cabin</h2>
+      <div class="kv">
+        <div class="mmhg" id="cab_mmhg">760.00 mmHg</div>
+        <div class="psi" id="cab_psi">14.70 psi</div>
+      </div>
+      <div class="subtext">
+        Cabin altitude: <span id="cab_alt_m">0</span> m · <span id="cab_alt_ft">0 ft</span>
+      </div>
+      <div class="subtext">
+        ΔP: <span id="cab_dp_psi">0.00 psi</span> (<span id="cab_dp_mmhg">0.00 mmHg</span>) · <span class="badge" id="segment_badge">At ambient</span>
+      </div>
+      <div class="note">Rule: cabin starts at ambient and only deviates when the profile demands and ΔP allows.</div>
+    </section>
+
+    <!-- O2 Partial Pressures + SpO2 + Hypoxia alarm -->
+    <section class="card span-8">
+      <h2>O₂ Partial Pressures</h2>
+      <div class="stack">
+        <div class="status-chip">
+          <span class="mono">PIO₂</span>
+          <span class="strong" id="pio2">149.0 mmHg</span>
+          <span class="muted">Sea-level: 149 mmHg</span>
+        </div>
+        <div class="status-chip">
+          <span class="mono">PAO₂</span>
+          <span class="strong" id="pao2">100.0 mmHg</span>
+          <span class="muted">Sea-level: 100 mmHg</span>
+        </div>
+        <div class="status-chip" id="spo2_chip">
+          <span class="mono">SpO₂ (est)</span>
+          <span class="strong" id="spo2_val">98 %</span>
+          <span class="muted">Display estimate from PAO₂</span>
+        </div>
+        <div class="status-chip" id="hypoxia_chip" style="display:none">
+          <span class="danger">HYPOXIA</span>
+          <span>Increase FiO₂ or cabin pressure</span>
+        </div>
+        <div class="note">Calculations use cabin pressure plus mask overpressure when in pressure‑demand mode. PH₂O = 47 mmHg.</div>
+      </div>
+    </section>
+
+    <!-- Mask Overpressure Teaching -->
+    <section class="card span-4">
+      <h2>Mask Overpressure Teaching</h2>
+      <div id="mask_status" class="stack">
+        <div class="status-chip"><span class="good">OK</span> <span class="muted">Comfortable breathing load</span></div>
+      </div>
+      <div class="divider"></div>
+      <div class="stack">
+        <div class="muted">Guidance without suit counter‑pressure:</div>
+        <div class="stack">
+          <div>• <span class="strong">≤ 20 mmHg</span>: sustainable for most.</div>
+          <div>• <span class="strong">20–40 mmHg</span>: increased work of breathing.</div>
+          <div>• <span class="strong">40–80 mmHg</span>: short‑term only; risk of CO₂ retention.</div>
+          <div>• <span class="strong">> 80 mmHg (~1.5 psi)</span>: generally not ventilable without suit counter‑pressure.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Boyle’s law -->
+    <section class="card span-12">
+      <h2>Boyle’s Law (trapped gas volume)</h2>
+      <div class="row">
+        <div>
+          <div class="status-chip">
+            <span class="mono">Relative volume vs sea level (cabin)</span>
+            <span class="strong" id="boyle_cabin">1.00 ×</span>
           </div>
-          <div class="chip mono" id="riskRange">&lt; 1.0</div>
         </div>
-        <div class="small" style="margin-top:8px">
-          Educational bands based on decompression theory: <span class="mono">&lt;1.0</span> Minimal; <span class="mono">1.0–1.5</span> Low; <span class="mono">1.5–2.0</span> Moderate; <span class="mono">2.0–2.5</span> Increased; <span class="mono">&gt;2.5</span> High.
+        <div>
+          <div class="status-chip">
+            <span class="mono">Relative volume vs sea level (ambient)</span>
+            <span class="strong" id="boyle_ambient">1.00 ×</span>
+          </div>
         </div>
       </div>
-    </div>
+      <div class="note">Computed as P₀ / P, where P₀ = 760 mmHg.</div>
+    </section>
 
-    <!-- Legend / Notes -->
-    <div class="panel" style="margin-top:16px">
-      <h2>Notes</h2>
-      <ul>
-        <li><strong>Pressurization:</strong> Cabin pressure is the minimum of sea-level pressure, ambient+ΔP, and a target pressure (derived from the selected cabin altitude cap). Below the pressurization start altitude, cabin equals ambient.</li>
-        <li><strong>Continuous-flow O₂:</strong> Effective FiO₂ is computed by mixing baseline cabin FiO₂ with O₂ flow scaled by minute ventilation and mask efficiency.</li>
-        <li><strong>Tissue kinetics:</strong> Single-compartment exponential approach to inspired PiN₂ with adjustable half-time and real-time simulation.</li>
-        <li><strong>Henry’s law:</strong> Relative dissolved N₂ index uses PiN₂ normalized to sea-level inspired N₂.</li>
-        <li><strong>DCS banding:</strong> TR cutoffs: &lt;1.0 Minimal; 1.0–1.5 Low; 1.5–2.0 Moderate; 2.0–2.5 Increased; &gt;2.5 High.</li>
-      </ul>
-    </div>
+    <!-- Footer notes -->
+    <section class="span-12">
+      <div class="note">
+        Model: ISA (simplified to stratosphere), Dalton’s law, Boyle’s law, and the alveolar gas equation. Educational tool — values illustrative.
+      </div>
+    </section>
+
   </div>
+</div>
 
 <script>
-(function(){
-  // Physical constants
-  const P0_Pa = 101325;           // Sea-level pressure
-  const T0 = 288.15;              // K
-  const L = 0.0065;               // K/m
-  const g = 9.80665;              // m/s^2
-  const M = 0.0289644;            // kg/mol
-  const R = 8.31447;              // J/(mol*K)
-  const PA_TO_MMHG = 0.00750061683;
-  const PSI_TO_MMHG = 51.7149326;
-  const PH2O = 47.0;              // mmHg, water vapor pressure at body temp
+  // ---------- Constants and helpers ----------
+  const FT_PER_M = 3.280839895;
+  const PA_PER_PSI = 6894.75729;
+  const PA_PER_MMHG = 133.3223684211;
+  const P0_PA = 101325;
+  const P0_MMHG = P0_PA / PA_PER_MMHG;
 
-  // Elements
+  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+  function fmt(n, d=2){ return Number.isFinite(n) ? n.toFixed(d) : "—"; }
+  function fmtInt(n){ return Number.isFinite(n) ? Math.round(n).toLocaleString() : "—"; }
+  function Pa_to_mmHg(Pa){ return Pa / PA_PER_MMHG; }
+  function Pa_to_psi(Pa){ return Pa / PA_PER_PSI; }
+  function psi_to_Pa(psi){ return psi * PA_PER_PSI; }
+
+  // ISA pressure (troposphere to 11 km, isothermal to 20 km, extend with scale height)
+  function isaPressurePa(alt_m){
+    const g = 9.80665, R = 287.05287;
+    const T0 = 288.15, L = 0.0065;
+    if (alt_m <= 11000){
+      return P0_PA * Math.pow(1 - (L*alt_m)/T0, g/(R*L));
+    }
+    const T11 = T0 - L*11000;
+    const P11 = P0_PA * Math.pow(1 - (L*11000)/T0, g/(R*L));
+    if (alt_m <= 20000){
+      return P11 * Math.exp(-g*(alt_m-11000)/(R*T11));
+    }
+    const Tiso = 216.65;
+    const P20 = P11 * Math.exp(-g*(20000-11000)/(R*T11));
+    return P20 * Math.exp(-g*(alt_m-20000)/(R*Tiso));
+  }
+
+  function pressureToAltApprox_m(Pa){
+    const g = 9.80665, R = 287.05287, T0 = 288.15, L = 0.0065;
+    const P11 = isaPressurePa(11000);
+    if (Pa >= P11){
+      const ratio = Pa / P0_PA;
+      const term = 1 - Math.pow(ratio, (R*L)/g);
+      return (term * T0) / L;
+    } else {
+      const T11 = T0 - L*11000;
+      return 11000 + (-R*T11/g) * Math.log(Pa / P11);
+    }
+  }
+
+  // Pressurization modes
+  function computeCabinPressurePa(airAlt_m, mode, cabinSet_m, dPmax_psi){
+    const Pamb = isaPressurePa(airAlt_m);
+    if (mode === "failed"){
+      return { Pcabin: Pamb, segment: "At ambient" };
+    }
+
+    const Pset = isaPressurePa(cabinSet_m);
+    const dPmax_Pa = psi_to_Pa(dPmax_psi);
+
+    // Desired cabin pressure by profile
+    let Pdesired;
+    if (mode === "jet"){
+      Pdesired = Pset;
+    } else { // ramped
+      const k = 0.25;
+      const cabAlt_sched = cabinSet_m + k * Math.max(0, airAlt_m - cabinSet_m);
+      Pdesired = isaPressurePa(cabAlt_sched);
+    }
+
+    // Enforce ΔP: Pcabin <= Pamb + dPmax
+    const Pcabin_limited = Math.min(Pdesired, Pamb + dPmax_Pa);
+
+    let segment = "At setpoint";
+    if (Pcabin_limited === (Pamb + dPmax_Pa)) segment = "ΔP max (constant ΔP)";
+    if (mode === "ramped" && Pcabin_limited !== (Pamb + dPmax_Pa) && Pcabin_limited !== Pset) segment = "Ramped schedule";
+
+    // On ground / low altitudes, do not start below ambient
+    if (airAlt_m <= cabinSet_m && mode !== "failed"){
+      return { Pcabin: Pamb, segment: "At ambient" };
+    }
+    return { Pcabin: Pcabin_limited, segment };
+  }
+
+  // O2 calculations
+  function calcPIO2_mmHg(Ptotal_mmHg, FiO2){ const PH2O = 47; return Math.max(0, (Ptotal_mmHg - PH2O) * FiO2); }
+  function calcPAO2_mmHg(Ptotal_mmHg, FiO2, PaCO2, RQ){ return Math.max(0, calcPIO2_mmHg(Ptotal_mmHg, FiO2) - (PaCO2 / RQ)); }
+
+  // Estimated SpO2 from PAO2 (illustrative sigmoid)
+  function spo2FromPAO2(PAO2){
+    const s = 100/(1+Math.exp(-(PAO2-55)/8));
+    return clamp(s, 0, 100);
+  }
+
+  // Boyle’s relative volume vs sea level
+  function boyleRelVolume(P_mmHg){ return (Number.isFinite(P_mmHg) && P_mmHg>0) ? (760 / P_mmHg) : NaN; }
+
+  // Mask overpressure status
+  function maskStatusLabel(over_mmHg, mode){
+    if (mode !== "pressure" || over_mmHg <= 0){
+      return { cls:"good", text:"No additional overpressure load" };
+    }
+    if (over_mmHg <= 20) return { cls:"good", text:"Comfortable breathing load" };
+    if (over_mmHg <= 40) return { cls:"warn", text:"Increased work of breathing" };
+    if (over_mmHg <= 80) return { cls:"warn", text:"Short‑term only; CO₂ retention risk" };
+    return { cls:"danger", text:"Not ventilable without suit counter‑pressure" };
+  }
+
+  // ---------- DOM ----------
   const el = id => document.getElementById(id);
 
-  const aircraftType = el('aircraftType');
-  const acAlt = el('acAlt'), acAltNum = el('acAltNum');
-  const pressStart = el('pressStart'), pressStartNum = el('pressStartNum');
-  const dpMax = el('dpMax'), dpMaxNum = el('dpMaxNum');
-  const capAlt = el('capAlt'), capAltNum = el('capAltNum');
-
-  const o2Flow = el('o2Flow'), o2FlowNum = el('o2FlowNum');
-  const ve = el('ve'), veNum = el('veNum');
-  const eff = el('eff'), effNum = el('effNum');
-  const fio2Cabin = el('fio2Cabin'), fio2CabinNum = el('fio2CabinNum');
-
-  const tHalf = el('tHalf'), tHalfNum = el('tHalfNum');
-  const simSpeed = el('simSpeed'), simSpeedNum = el('simSpeedNum');
-
-  const btnStart = el('btnStart'), btnPause = el('btnPause'), btnResetTissue = el('btnResetTissue');
-  const btnSetSeaLevel = el('btnSetSeaLevel'), btnSetCurrentEq = el('btnSetCurrentEq');
-
-  const outAcAlt = el('outAcAlt'), outPAmb = el('outPAmb');
-  const outCabAlt = el('outCabAlt'), outPCab = el('outPCab'), outDP = el('outDP');
-  const outFiO2 = el('outFiO2'), outPiO2 = el('outPiO2'), outPiN2 = el('outPiN2'), outHenry = el('outHenry');
-  const outTissueN2 = el('outTissueN2'), outTR = el('outTR');
-  const riskBand = el('riskBand'), riskLabel = el('riskLabel'), riskRange = el('riskRange');
-
-  // State
-  let running = false;
-  let lastTS = performance.now();
-  let tissuePN2 = 0; // mmHg
-  let seaLevelPiN2 = 0; // baseline for Henry's law normalization
-
-  // Utilities
-  const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
-  const ftToM = ft => ft * 0.3048;
-  const mToFt = m => m / 0.3048;
-
-  function pressureAtAltitude_mmHg(alt_ft){
-    const h = ftToM(alt_ft);
-    const P = P0_Pa * Math.pow(1 - (L*h)/T0, (g*M)/(R*L));
-    return P * PA_TO_MMHG;
-  }
-  function altitudeFromPressure_ft_mmHg(P_mmHg){
-    const P = P_mmHg / PA_TO_MMHG;
-    const exponent = (R*L)/(g*M);
-    const term = Math.pow(P/P0_Pa, exponent);
-    const h = (T0/L) * (1 - term);
-    return Math.max(0, mToFt(h));
-  }
-
-  // Bind twin inputs
-  function bindTwin(range, number, onChange){
-    const sync = () => { number.value = range.value; onChange(); };
-    const syncNum = () => { range.value = number.value; onChange(); };
-    range.addEventListener('input', sync);
-    number.addEventListener('input', syncNum);
-  }
-
-  // Defaults per aircraft type
-  function setAircraftDefaults(){
-    const type = aircraftType.value;
-    if(type==='commercial'){
-      pressStart.value = pressStartNum.value = 0;          // starts immediately
-      dpMax.value = dpMaxNum.value = 8.6;                  // psi
-      capAlt.value = capAltNum.value = 8000;               // ft
-    } else if(type==='tactical'){
-      pressStart.value = pressStartNum.value = 8000;       // ft
-      dpMax.value = dpMaxNum.value = 5.0;                  // psi
-      capAlt.value = capAltNum.value = 15000;              // ft
-    } else {
-      // keep user custom settings
-    }
-    computeAndRender();
-  }
-
-  // FiO2 effective with continuous flow
-  function effectiveFiO2(Pcabin_mmHg){
-    const base = parseFloat(fio2Cabin.value);
-    const flow = parseFloat(o2Flow.value); // L/min
-    const ventilation = Math.max(0.1, parseFloat(ve.value)); // L/min
-    const eta = parseFloat(eff.value);
-    // Simple educational mixer: fraction of breath replaced by O2 stream
-    const frac = clamp((flow / ventilation) * eta, 0, 1);
-    const fi = clamp(base + frac * (1 - base), 0, 1);
-    return fi;
-  }
-
-  // Cabin pressure schedule
-  function cabinPressure_mmHg(Pamb_mmHg){
-    const startFt = parseFloat(pressStart.value);
-    const dpPsi = parseFloat(dpMax.value);
-    const capFt = parseFloat(capAlt.value);
-
-    const acAltFt = parseFloat(acAlt.value);
-    if(acAltFt < startFt){
-      return Pamb_mmHg; // no pressurization yet
-    }
-    const Psea = pressureAtAltitude_mmHg(0);
-    const Pcap = pressureAtAltitude_mmHg(capFt);
-
-    // Candidate targets
-    // We want cabin pressure as high as possible (lower cabin altitude) but within constraints:
-    // Pcabin ≤ Psea; Pcabin ≤ Pamb + ΔP; Pcabin ≥ max(Pamb, Pcap)
-    const upperByDP = Pamb_mmHg + dpPsi * PSI_TO_MMHG;
-    const targetHigh = Math.min(Psea, upperByDP);
-    const targetLow = Math.max(Pamb_mmHg, Pcap);
-    const Pcabin = Math.max(targetLow, Math.min(targetHigh, Psea));
-    return clamp(Pcabin, Pamb_mmHg, Psea);
-  }
-
-  function updateRisk(TR){
-    let label='Minimal', range='< 1.0', cls='risk-min';
-    if(TR < 1.0){ label='Minimal'; range='< 1.0'; cls='risk-min'; }
-    else if(TR < 1.5){ label='Low'; range='1.0 – 1.5'; cls='risk-low'; }
-    else if(TR < 2.0){ label='Moderate'; range='1.5 – 2.0'; cls='risk-mod'; }
-    else if(TR < 2.5){ label='Increased'; range='2.0 – 2.5'; cls='risk-inc'; }
-    else { label='High'; range='> 2.5'; cls='risk-high'; }
-    riskBand.className = 'band ' + cls;
-    riskLabel.textContent = label;
-    riskRange.textContent = range;
-  }
-
-  function computeAndRender(dtSeconds = 0){
+  function update(){
     // Inputs
-    const acAltFt = parseFloat(acAlt.value);
-    const Pamb = pressureAtAltitude_mmHg(acAltFt);
-    const Pcabin = cabinPressure_mmHg(Pamb);
-    const cabAltFt = altitudeFromPressure_ft_mmHg(Pcabin);
+    const alt_m = clamp(parseFloat(el('alt_m').value), 0, 30000);
+    const mode = el('press_profile').value;
+    const cabinSet_m = clamp(parseFloat(el('cabin_set_m').value), 0, 5000);
+    const dPmax_psi = clamp(parseFloat(el('dPmax_psi').value), 0, 20);
 
-    // Gas mixing
-    const FiO2 = effectiveFiO2(Pcabin);
-    const PiO2 = Math.max(0, (Pcabin - PH2O) * FiO2);
-    const FiN2 = clamp(1 - FiO2, 0, 1);
-    const PiN2 = Math.max(0, (Pcabin - PH2O) * FiN2);
+    const o2_mode = el('o2_mode').value;
+    const FiO2 = clamp(parseFloat(el('fio2').value), 0.21, 1.0);
+    const mask_over_mmHg = clamp(parseFloat(el('mask_over_mmHg').value), 0, 300);
+    const PaCO2 = clamp(parseFloat(el('paco2').value), 20, 60);
+    const RQ = clamp(parseFloat(el('rq').value), 0.7, 1.0);
 
-    // Tissue kinetics
-    const half = Math.max(1, parseFloat(tHalf.value)); // min
-    const k = Math.log(2) / (half * 60); // per second
-    if(dtSeconds > 0){
-      const e = Math.exp(-k * dtSeconds);
-      tissuePN2 = tissuePN2 * e + PiN2 * (1 - e);
-    } else if (!running && tissuePN2===0){
-      // Initialize once at first render to sea-level equilibrium baseline
-      const Psea = pressureAtAltitude_mmHg(0);
-      const PiN2Sea = (Psea - PH2O) * (1 - parseFloat(fio2Cabin.value));
-      tissuePN2 = PiN2Sea;
-      seaLevelPiN2 = PiN2Sea;
-    }
+    // Ambient
+    const Pamb_Pa = isaPressurePa(alt_m);
+    const Pamb_mmHg = Pa_to_mmHg(Pamb_Pa);
+    const Pamb_psi = Pa_to_psi(Pamb_Pa);
 
-    const TR = Pamb > 0 ? (tissuePN2 / Pamb) : 0;
+    // Cabin
+    const cab = computeCabinPressurePa(alt_m, mode, cabinSet_m, dPmax_psi);
+    const Pcab_Pa = cab.Pcabin;
+    const Pcab_mmHg = Pa_to_mmHg(Pcab_Pa);
+    const Pcab_psi = Pa_to_psi(Pcab_Pa);
+    const cab_alt_m = pressureToAltApprox_m(Pcab_Pa);
+    const cab_alt_ft = cab_alt_m * FT_PER_M;
 
-    // Henry’s law (relative dissolved N2)
-    if(seaLevelPiN2 === 0){
-      const Psea = pressureAtAltitude_mmHg(0);
-      seaLevelPiN2 = (Psea - PH2O) * (1 - parseFloat(fio2Cabin.value));
-    }
-    const henryRel = seaLevelPiN2 > 0 ? (PiN2 / seaLevelPiN2) : 1;
+    // ΔP
+    const dP_Pa = Math.max(0, Pcab_Pa - Pamb_Pa);
+    const dP_psi = dP_Pa / PA_PER_PSI;
+    const dP_mmhg = dP_Pa / PA_PER_MMHG;
 
-    // Outputs
-    outAcAlt.textContent = Math.round(acAltFt).toLocaleString();
-    outPAmb.textContent = Pamb.toFixed(1);
-    outCabAlt.textContent = Math.round(cabAltFt).toLocaleString();
-    outPCab.textContent = Pcabin.toFixed(1);
-    outDP.textContent = ((Pcabin - Pamb)/PSI_TO_MMHG).toFixed(2);
+    // Inspired total pressure for gas calcs
+    let Pinspired_mmHg = Pcab_mmHg;
+    if (o2_mode === "pressure") Pinspired_mmHg = Pcab_mmHg + mask_over_mmHg;
 
-    outFiO2.textContent = FiO2.toFixed(4);
-    outPiO2.textContent = PiO2.toFixed(1);
-    outPiN2.textContent = PiN2.toFixed(1);
-    outHenry.textContent = (henryRel).toFixed(2);
+    // Gas/physiology
+    const PIO2 = calcPIO2_mmHg(Pinspired_mmHg, FiO2);
+    const PAO2 = calcPAO2_mmHg(Pinspired_mmHg, FiO2, PaCO2, RQ);
+    const SpO2 = spo2FromPAO2(PAO2);
 
-    outTissueN2.textContent = tissuePN2.toFixed(1);
-    outTR.textContent = TR.toFixed(2);
-    updateRisk(TR);
+    // Boyle’s
+    const boyleCab = boyleRelVolume(Pcab_mmHg);
+    const boyleAmb = boyleRelVolume(Pamb_mmHg);
+
+    // UI writes
+    el('alt_ft').textContent = fmtInt(alt_m * FT_PER_M) + " ft";
+    el('cabin_set_ft').textContent = fmtInt(cabinSet_m * FT_PER_M) + " ft";
+    el('amb_alt_m').textContent = fmtInt(alt_m);
+    el('amb_alt_ft2').textContent = fmtInt(alt_m * FT_PER_M) + " ft";
+
+    el('amb_mmhg').textContent = fmt(Pamb_mmHg, 2) + " mmHg";
+    el('amb_psi').textContent = fmt(Pamb_psi, 2) + " psi";
+
+    el('cab_mmhg').textContent = fmt(Pcab_mmHg, 2) + " mmHg";
+    el('cab_psi').textContent = fmt(Pcab_psi, 2) + " psi";
+    el('cab_alt_m').textContent = fmtInt(cab_alt_m);
+    el('cab_alt_ft').textContent = fmtInt(cab_alt_ft) + " ft";
+    el('segment_badge').textContent = cab.segment;
+
+    el('cab_dp_psi').textContent = fmt(dP_psi, 2) + " psi";
+    el('cab_dp_mmhg').textContent = fmt(dP_mmhg, 2) + " mmHg";
+
+    el('pio2').textContent = fmt(PIO2, 1) + " mmHg";
+    el('pao2').textContent = fmt(PAO2, 1) + " mmHg";
+
+    el('spo2_val').textContent = fmt(SpO2, 0) + " %";
+    el('hypoxia_chip').style.display = (SpO2 < 90) ? "" : "none";
+
+    el('boyle_cabin').textContent = fmt(boyleCab, 2) + " ×";
+    el('boyle_ambient').textContent = fmt(boyleAmb, 2) + " ×";
+
+    // Mask status
+    const status = maskStatusLabel(mask_over_mmHg, o2_mode);
+    el('mask_status').innerHTML =
+      `<div class="status-chip"><span class="${status.cls.toLowerCase()}">${status.cls.toUpperCase()}</span> <span>${status.text}</span></div>` +
+      ((o2_mode === "pressure" && mask_over_mmHg>0)
+        ? `<div class="muted">Mask overpressure: <span class="strong">${fmt(mask_over_mmHg,0)} mmHg</span> (${fmt(mask_over_mmHg/51.7149,2)} psi)</div>`
+        : `<div class="muted">No added mask pressure.</div>`);
   }
 
-  // Animation / sim loop
-  function tick(ts){
-    if(!running){ lastTS = ts; return; }
-    const speed = parseFloat(simSpeed.value);
-    const dtReal = (ts - lastTS) / 1000;
-    const dtSim = dtReal * speed;
-    lastTS = ts;
-    computeAndRender(dtSim);
-    requestAnimationFrame(tick);
-  }
-
-  // Bindings
-  bindTwin(acAlt, acAltNum, () => computeAndRender());
-  bindTwin(pressStart, pressStartNum, () => computeAndRender());
-  bindTwin(dpMax, dpMaxNum, () => computeAndRender());
-  bindTwin(capAlt, capAltNum, () => computeAndRender());
-
-  bindTwin(o2Flow, o2FlowNum, () => computeAndRender());
-  bindTwin(ve, veNum, () => computeAndRender());
-  bindTwin(eff, effNum, () => computeAndRender());
-  bindTwin(fio2Cabin, fio2CabinNum, () => {
-    // Update sea-level baseline if user changes baseline FiO2 and tissue is still at initial state
-    computeAndRender();
+  // Wire inputs
+  ['alt_m','press_profile','cabin_set_m','dPmax_psi','o2_mode','fio2','mask_over_mmHg','paco2','rq'].forEach(id=>{
+    const node = document.getElementById(id);
+    node.addEventListener('input', update);
+    node.addEventListener('change', update);
   });
 
-  bindTwin(tHalf, tHalfNum, () => computeAndRender());
-  bindTwin(simSpeed, simSpeedNum, () => computeAndRender());
-
-  aircraftType.addEventListener('change', setAircraftDefaults);
-
-  btnStart.addEventListener('click', ()=>{
-    if(!running){
-      running = true;
-      btnStart.disabled = true;
-      btnPause.disabled = false;
-      lastTS = performance.now();
-      requestAnimationFrame(tick);
-    }
-  });
-  btnPause.addEventListener('click', ()=>{
-    running = false;
-    btnStart.disabled = false;
-    btnPause.disabled = true;
-  });
-  btnResetTissue.addEventListener('click', ()=>{
-    // Reset current tissue to current equilibrium PiN2
-    const acAltFt = parseFloat(acAlt.value);
-    const Pamb = pressureAtAltitude_mmHg(acAltFt);
-    const Pcabin = cabinPressure_mmHg(Pamb);
-    const FiO2 = effectiveFiO2(Pcabin);
-    const PiN2 = Math.max(0, (Pcabin - PH2O) * (1 - FiO2));
-    tissuePN2 = PiN2;
-    computeAndRender();
-  });
-  btnSetSeaLevel.addEventListener('click', ()=>{
-    const Psea = pressureAtAltitude_mmHg(0);
-    const PiN2Sea = (Psea - PH2O) * (1 - parseFloat(fio2Cabin.value));
-    tissuePN2 = PiN2Sea;
-    seaLevelPiN2 = PiN2Sea;
-    computeAndRender();
-  });
-  btnSetCurrentEq.addEventListener('click', ()=>{
-    const acAltFt = parseFloat(acAlt.value);
-    const Pamb = pressureAtAltitude_mmHg(acAltFt);
-    const Pcabin = cabinPressure_mmHg(Pamb);
-    const FiO2 = effectiveFiO2(Pcabin);
-    const PiN2 = Math.max(0, (Pcabin - PH2O) * (1 - FiO2));
-    tissuePN2 = PiN2;
-    computeAndRender();
-  });
-
-  // Initialize defaults and first render
-  setAircraftDefaults();
-  computeAndRender();
-})();
+  // Initial render (defaults to Failed mode and FiO2 = 0.21)
+  update();
 </script>
 </body>
 </html>
+```
