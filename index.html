@@ -436,7 +436,8 @@
   }
   
   return { Pcabin: Pcabin_limited, segment };
-
+    }
+  }
 
   // O2 calculations
   function calcPIO2_mmHg(Ptotal_mmHg, FiO2){ const PH2O = 47; return Math.max(0, (Ptotal_mmHg - PH2O) * FiO2); }
