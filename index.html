@@ -466,6 +466,8 @@
   const el = id => document.getElementById(id);
 
   function update(){
+    console.log("UPDATE CALLED — airAlt_m is", document.getElementById('alt_m').value);
+
     // Inputs
     const alt_m = clamp(parseFloat(el('alt_m').value), 0, 30000);
     const mode = el('press_profile').value;
