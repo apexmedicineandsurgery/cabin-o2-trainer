@@ -373,13 +373,14 @@
       // Ambient until 8k ft
       Pdesired = Pamb;
       segment = "At ambient";
-    } else if ((Pamb - P_8k_Pa) <= dPmax_Pa) {
+    } else if ((P_8k_Pa - Pamb) <= dPmax_Pa) {
+
       // Hold cabin at 8k ft until ΔP limit reached
       Pdesired = P_8k_Pa;
       segment = "Holding at 8k ft";
     } else {
       // Maintain constant ΔP above limit
-      Pdesired = Pamb - dPmax_Pa;
+      Pdesired = Pamb + dPmax_Pa;
       segment = "ΔP max (constant ΔP)";
     }
 
