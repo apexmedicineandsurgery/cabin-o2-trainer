@@ -208,6 +208,46 @@
       </div>
     </section>
 
+    <!-- Henry’s Law + DCS -->
+    <section class="card span-12">
+      <h2>Henry’s Law + DCS Risk</h2>
+      <div class="row">
+        <div>
+          <label for="n2_init_preset">Initial N₂ saturation preset</label>
+          <select id="n2_init_preset">
+            <option value="sea_air" selected>Sea level air (default)</option>
+            <option value="custom">Custom (enter mmHg)</option>
+          </select>
+        </div>
+        <div>
+          <label for="n2_init_mmHg">Initial saturated N₂ pressure (mmHg)</label>
+          <input id="n2_init_mmHg" type="number" value="563" min="0" max="1200" step="1" />
+          <div class="inline muted">Default ≈ (760 − 47) × 0.79</div>
+        </div>
+      </div>
+    
+      <div class="divider"></div>
+    
+      <div class="row">
+        <div class="status-chip">
+          <span class="mono">Inspired N₂ (current)</span>
+          <span class="strong" id="pn2_current">— mmHg</span>
+        </div>
+        <div class="status-chip">
+          <span class="mono">Tissue Ratio</span>
+          <span class="strong" id="tissue_ratio">—</span>
+        </div>
+        <div class="status-chip" id="dcs_risk_chip">
+          <span class="badge">DCS risk: —</span>
+        </div>
+      </div>
+    
+      <div class="note">
+        Risk thresholds will match your provided table — placeholder bands for now.
+      </div>
+    </section>
+
+    
     <!-- Boyle’s law -->
     <section class="card span-12">
       <h2>Boyle’s Law (trapped gas volume)</h2>
@@ -245,6 +285,25 @@
   const PA_PER_MMHG = 133.3223684211;
   const P0_PA = 101325;
   const P0_MMHG = P0_PA / PA_PER_MMHG;
+
+    // ---- Henry's law + DCS constants/helpers ----
+  const PH2O_MMHG = 47; // Inspired water vapour pressure
+  
+  // Inspired N₂ partial pressure (mmHg) given total pressure & FiO₂
+  function calcInspiredPN2_mmHg(Ptotal_mmHg, FiO2) {
+    const FN2 = Math.max(0, 1 - FiO2);
+    return Math.max(0, (Ptotal_mmHg - PH2O_MMHG) * FN2);
+  }
+  
+  // Map Tissue Ratio to risk label + class
+  function dcsRiskFromTR(TR) {
+    if (!Number.isFinite(TR) || TR <= 0) return { label: "—", cls: "muted" };
+    if (TR <= 1.00) return { label: "Minimal", cls: "good" };
+    if (TR <= 1.50) return { label: "Low", cls: "accent2" };
+    if (TR <= 2.00) return { label: "Moderate", cls: "warn" };
+    if (TR <= 2.50) return { label: "Increased", cls: "danger" };
+    return { label: "High", cls: "danger" };
+  }
 
   function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
   function fmt(n, d=2){ return Number.isFinite(n) ? n.toFixed(d) : "—"; }
@@ -417,13 +476,38 @@
 
     // Mask status
     const status = maskStatusLabel(mask_over_mmHg, o2_mode);
-    el('mask_status').innerHTML =
-      `<div class="status-chip"><span class="${status.cls.toLowerCase()}">${status.cls.toUpperCase()}</span> <span>${status.text}</span></div>` +
-      ((o2_mode === "pressure" && mask_over_mmHg>0)
-        ? `<div class="muted">Mask overpressure: <span class="strong">${fmt(mask_over_mmHg,0)} mmHg</span> (${fmt(mask_over_mmHg/51.7149,2)} psi)</div>`
-        : `<div class="muted">No added mask pressure.</div>`);
-  }
+    el('mask_status').innerHTML = `<div class="status-chip"><span class="${status.cls.toLowerCase()}">${status.cls.toUpperCase()}</span> <span>${status.text}</span></div>` +
+      ((o2_mode === "pressure" && mask_over_mmHg > 0)
+        ? `<div class="muted">Mask overpressure: <span class="strong">${fmt(mask_over_mmHg, 0)} mmHg</span> (${fmt(mask_over_mmHg / 51.7149, 2)} psi)</div>`
+        : `<div class="muted">No added mask pressure.</div>`
+      );
+    
+    // ----- Henry's law + DCS (tissue N₂) -----
+    const initPreset = document.getElementById('n2_init_preset').value;
+    let N2_init_mmHg = parseFloat(document.getElementById('n2_init_mmHg').value);
+    
+    // Default sea-level saturation ≈ (760 − 47) × 0.79
+    if (initPreset === 'sea_air' || !Number.isFinite(N2_init_mmHg)) {
+      N2_init_mmHg = (760 - PH2O_MMHG) * 0.79;
+    }
+    
+    // Current inspired N₂ — uses total pressure at the mask + FiO₂
+    const PN2_current = calcInspiredPN2_mmHg(Pinspired_mmHg, FiO2);
+    
+    // Tissue Ratio (TR)
+    const TR = N2_init_mmHg / PN2_current;
+    
+    // Map to risk band
+    const risk = dcsRiskFromTR(TR);
+    
+    // ---- Write values into the new UI card ----
+    document.getElementById('pn2_current').textContent = PN2_current.toFixed(1) + ' mmHg';
+    document.getElementById('tissue_ratio').textContent = TR.toFixed(2);
+    const riskChip = document.getElementById('dcs_risk_chip');
+    riskChip.innerHTML = `<span class="${risk.cls}">DCS risk: ${risk.label}</span>`;
+    } 
 
+  
   // Wire inputs
   ['alt_m','press_profile','cabin_set_m','dPmax_psi','o2_mode','fio2','mask_over_mmHg','paco2','rq'].forEach(id=>{
     const node = document.getElementById(id);
@@ -431,6 +515,10 @@
     node.addEventListener('change', update);
   });
 
+  document.getElementById('n2_init_preset').addEventListener('input', update);
+  document.getElementById('n2_init_mmHg').addEventListener('input', update);
+
+  
   // Initial render (defaults to Failed mode and FiO2 = 0.21)
   update();
 </script>
