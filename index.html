@@ -100,7 +100,7 @@
         <div>
           <label for="dPmax_psi">Max ΔP (psi)</label>
           <input id="dPmax_psi" type="number" value="8" min="0" max="12" step="0.1" />
-          <div class="inline muted">Typical transport: 7–9 psi</div>
+          <div class="inline muted">Typical fighter: 3-5 psi & transport: 7–9 psi</div>
         </div>
       </div>
       <div class="divider"></div>
@@ -344,6 +344,8 @@
 
   // Pressurization modes
   function computeCabinPressurePa(airAlt_m, mode, cabinSet_m, dPmax_psi){
+    console.log("Mode is:", mode);
+
     const Pamb = isaPressurePa(airAlt_m);
     if (mode === "failed"){
       return { Pcabin: Pamb, segment: "At ambient" };
@@ -375,6 +377,8 @@
       // Maintain constant ΔP above limit
       Pdesired = Pamb - dPmax_Pa;
     }
+      console.log("Jet branch Pdesired:", Pdesired, "Segment:", segment);
+
    } else {
   // Commercial airliner-style pressurization:
   // 1) Below target cruise cabin altitude (e.g. 6k–8k ft), climb at reduced rate
