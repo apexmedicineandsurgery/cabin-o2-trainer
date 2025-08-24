@@ -280,15 +280,18 @@
 
 <script>
   // ---------- Constants and helpers ----------
-  const FT_PER_M = 3.280839895;
-  function ft_to_m(feet) {
-  return feet * 0.3048; // 1 ft = 0.3048 m
-  }
-
-  const PA_PER_PSI = 6894.75729;
-  const PA_PER_MMHG = 133.3223684211;
-  const P0_PA = 101325;
-  const P0_MMHG = P0_PA / PA_PER_MMHG;
+  const FT_PER_M = 3.280839895 ;
+  function ft_to_m ( feet ) { return feet * 0.3048 ; // 1 ft = 0.3048 m }
+  const PA_PER_PSI = 6894.75729 ;
+  const PA_PER_MMHG = 133.3223684211 ;
+  const P0_PA = 101325 ;
+  const P0_MMHG = P0_PA / PA_PER_MMHG ;
+  
+  // --- Cabin rate limits (commercial-style) ---
+  const CABIN_CLIMB_RATE_FTPM   = 400 ; // default climb rate limit
+  const CABIN_DESCENT_RATE_FTPM = 400 ; // default descent rate limit
+  const CABIN_CLIMB_RATE_MPS    = ( CABIN_CLIMB_RATE_FTPM * 0.3048 ) / 60 ;
+  const CABIN_DESCENT_RATE_MPS  = ( CABIN_DESCENT_RATE_FTPM * 0.3048 ) / 60 ;
 
     // ---- Henry's law + DCS constants/helpers ----
   const PH2O_MMHG = 47; // Inspired water vapour pressure
@@ -333,124 +336,168 @@
     return P20 * Math.exp(-g*(alt_m-20000)/(R*Tiso));
   }
 
-  function pressureToAltApprox_m(Pa){
-    const g = 9.80665, R = 287.05287, T0 = 288.15, L = 0.0065;
-    const P11 = isaPressurePa(11000);
-    if (Pa >= P11){
-      const ratio = Pa / P0_PA;
-      const term = 1 - Math.pow(ratio, (R*L)/g);
-      return (term * T0) / L;
-    } else {
-      const T11 = T0 - L*11000;
-      return 11000 + (-R*T11/g) * Math.log(Pa / P11);
-    }
+  function pressureToAltApprox_m ( Pa ) {
+  const g = 9.80665 , R = 287.05287 ;
+  const T0 = 288.15 , L = 0.0065 ;
+  const Tiso = 216.65 ;
+
+  const P11 = isaPressurePa(11000);
+
+  // Troposphere inversion (0–11 km)
+  if (Pa >= P11) {
+    const ratio = Pa / P0_PA;
+    const term  = 1 - Math.pow(ratio, (R * L) / g);
+    return (term * T0) / L;
   }
 
-  // Pressurization modes
-  function computeCabinPressurePa(airAlt_m, mode, cabinSet_m, dPmax_psi){
-    console.log("Mode is:", mode);
+  // Isothermal inversion (~11–20 km)
+  const P20 = isaPressurePa(20000);
+  if (Pa >= P20) {
+    // P = P11 * exp(-g (h - 11000) / (R T11))
+    const T11 = T0 - L * 11000;
+    const dh  = - (R * T11 / g) * Math.log(Pa / P11);
+    return 11000 + dh;
+  }
 
-    const Pamb = isaPressurePa(airAlt_m);
-    if (mode === "failed"){
-      return { Pcabin: Pamb, segment: "At ambient" };
-    }
+  // Above 20 km, extend isothermal at 216.65 K
+  const dh = - (R * Tiso / g) * Math.log(Pa / P20);
+  return 20000 + dh;
+  }
 
-    const Pset = isaPressurePa(cabinSet_m);
+   // Commercial-style with ΔP guard and rate limiting
+  function computeCommercialCabinWithRate ( Pamb , cabinSet_m , dPmax_psi ) {
+  const Pset = isaPressurePa ( cabinSet_m ) ;
+  const dPmax_Pa = psi_to_Pa ( dPmax_psi ) ;
+
+  // Instantaneous target (guarded by ambient and ΔP)
+  const Ptarget = Math.max ( Pamb , Math.min ( Pset , Pamb + dPmax_Pa ) ) ;
+
+  // Rate-limit in altitude space
+  const targetAlt_m = pressureToAltApprox_m ( Ptarget ) ;
+  const nowMS = ( typeof performance !== 'undefined' ? performance.now ( ) : Date.now ( ) ) ;
+
+  if ( rampState.lastMode !== 'ramped' || rampState.lastAlt_m == null || rampState.lastMS == null ) {
+    rampState.lastMode = 'ramped' ;
+    rampState.lastAlt_m = targetAlt_m ;
+    rampState.lastMS = nowMS ;
+  }
+
+  const dt = Math.max ( 0 , ( nowMS - rampState.lastMS ) / 1000 ) ;
+  const diffAlt = targetAlt_m - rampState.lastAlt_m ;
+  const goingUp = diffAlt > 0 ;
+  const rate_mps = goingUp ? CABIN_CLIMB_RATE_MPS : CABIN_DESCENT_RATE_MPS ;
+  const maxStep = rate_mps * dt ;
+
+  const nextAlt_m = ( Math.abs ( diffAlt ) <= maxStep )
+    ? targetAlt_m
+    : rampState.lastAlt_m + Math.sign ( diffAlt ) * maxStep ;
+
+  rampState.lastAlt_m = nextAlt_m ;
+  rampState.lastMS = nowMS ;
+
+  const Pcabin = isaPressurePa ( nextAlt_m ) ;
+
+  const reached = Math.abs ( targetAlt_m - nextAlt_m ) < 1.0 ;
+  const segment = reached
+    ? ( Pset <= ( Pamb + dPmax_Pa ) ? "Holding at set cabin" : "ΔP max (limited)" )
+    : ( goingUp ? `Ramping up (~${ CABIN_CLIMB_RATE_FTPM } ft/min)` : `Ramping down (~${ CABIN_DESCENT_RATE_FTPM } ft/min)` ) ;
+
+  return { Pcabin , segment } ;
+  }
+
+
+  // State to rate-limit commercial cabin changes over time
+  const rampState = {
+    lastMode : null ,
+    lastAlt_m : null ,
+    lastMS : null
+  } ;
+
+  // Commercial-style with ΔP guard and rate limiting
+  function computeCommercialCabinWithRate ( Pamb , cabinSet_m , dPmax_psi ) {
+  const Pset = isaPressurePa ( cabinSet_m ) ;
+  const dPmax_Pa = psi_to_Pa ( dPmax_psi ) ;
+
+  // Clamp instantaneous target by ambient and ΔP
+  const Ptarget = Math.max ( Pamb , Math.min ( Pset , Pamb + dPmax_Pa ) ) ;
+
+  // Rate-limit in altitude space
+  const targetAlt_m = pressureToAltApprox_m ( Ptarget ) ;
+  const nowMS = ( typeof performance !== 'undefined' ? performance.now ( ) : Date.now ( ) ) ;
+
+  if ( rampState.lastMode !== 'commercial' || rampState.lastAlt_m == null || rampState.lastMS == null ) {
+    rampState.lastMode = 'commercial' ;
+    rampState.lastAlt_m = targetAlt_m ;
+    rampState.lastMS = nowMS ;
+  }
+
+  const dt = Math.max ( 0 , ( nowMS - rampState.lastMS ) / 1000 ) ;
+  const diffAlt = targetAlt_m - rampState.lastAlt_m ;
+  const goingUp = diffAlt > 0 ;
+  const rate_mps = goingUp ? CABIN_CLIMB_RATE_MPS : CABIN_DESCENT_RATE_MPS ;
+  const maxStep = rate_mps * dt ;
+
+  const nextAlt_m = ( Math.abs ( diffAlt ) <= maxStep )
+    ? targetAlt_m
+    : rampState.lastAlt_m + Math.sign ( diffAlt ) * maxStep ;
+
+  rampState.lastAlt_m = nextAlt_m ;
+  rampState.lastMS = nowMS ;
+
+  const Pcabin = isaPressurePa ( nextAlt_m ) ;
+
+  const reached = Math.abs ( targetAlt_m - nextAlt_m ) < 1.0 ;
+  const segment = reached
+    ? ( Pset <= ( Pamb + dPmax_Pa ) ? "Holding at set cabin" : "ΔP max (limited)" )
+    : ( goingUp ? `Ramping up (~${ CABIN_CLIMB_RATE_FTPM } ft/min)` : `Ramping down (~${ CABIN_DESCENT_RATE_FTPM } ft/min)` ) ;
+
+  return { Pcabin , segment } ;
+  }
+
+  const rampState = { lastMode: null, lastAlt_m: null, lastMS: null };    
+                             
+ // Pressurization modes
+  function computeCabinPressurePa ( airAlt_m , mode , cabinSet_m , dPmax_psi ) {
+  console.log("Mode is:", mode);
+  const Pamb = isaPressurePa(airAlt_m);
+
+  // Reset ramp state whenever NOT in Commercial-style ('ramped')
+  if (mode !== "ramped") {
+    rampState.lastMode = null;
+  }
+
+  // Failed: cabin equals ambient
+  if (mode === "failed") {
+    return { Pcabin: Pamb, segment: "At ambient" };
+  }
+
+  // Fighter‑jet schedule
+  if (mode === "jet") {
+    const eightK_m = ft_to_m(8000);
+    const P_8k_Pa  = isaPressurePa(eightK_m);
     const dPmax_Pa = psi_to_Pa(dPmax_psi);
 
-    // Desired cabin pressure by profile
     let Pdesired;
-    if (mode === "jet") {
-    // Fighter‑jet pressurization schedule:
-    // 1) Ambient ≤ 8k ft: unpressurized
-    // 2) Ambient > 8k ft: hold at 8k ft until ΔPmax reached
-    // 3) Above ΔPmax: climb cabin to preserve ΔPmax
-  
-    const eightK_m   = ft_to_m(8000);
-    const P_8k_Pa    = isaPressurePa(eightK_m);
-  
+    let segment;
+
     if (airAlt_m <= eightK_m) {
-      // Ambient until 8k ft
       Pdesired = Pamb;
       segment = "At ambient";
     } else if ((P_8k_Pa - Pamb) <= dPmax_Pa) {
-
-      // Hold cabin at 8k ft until ΔP limit reached
       Pdesired = P_8k_Pa;
       segment = "Holding at 8k ft";
     } else {
-      // Maintain constant ΔP above limit
       Pdesired = Pamb + dPmax_Pa;
       segment = "ΔP max (constant ΔP)";
     }
-
-      console.log("Jet branch Pdesired:", Pdesired, "Segment:", segment);
-      // ✅ return the expected object so update() can read Pcabin
     return { Pcabin: Pdesired, segment };
-      
-   } else {
-  // Commercial airliner-style pressurization:
-  // 1) Below target cruise cabin altitude (e.g. 6k–8k ft), climb at reduced rate
-  // 2) Hold cabin constant once cruise cabin reached
-  // 3) If ΔPmax exceeded above that, trigger constant ΔP warning
+  }
 
-  const cruiseCabin_m = cabinSet_m;                  // target cabin cruise alt in m
-  const Pcruise_Pa    = isaPressurePa(cruiseCabin_m);
+  // Commercial-style ('ramped'): rate-limited + ΔP guard
+  return computeCommercialCabinWithRate(Pamb, cabinSet_m, dPmax_psi);
+  }
 
-  if (airAlt_m <= cruiseCabin_m) {
-    // Ambient to cruise cabin
-    Pdesired = Pamb;
-    segment = "At ambient";
 
-      } else {
-        // Climb cabin altitude at reduced rate until hitting cruise cabin pressure
-        const rateFactor = 0.25; // 25% of aircraft climb rate
-        const cabAlt_sched = cruiseCabin_m + rateFactor * Math.max(0, airAlt_m - cruiseCabin_m);
-    
-        if (cabAlt_sched < cruiseCabin_m) {
-          // Shouldn’t happen, but sanity check
-          Pdesired = Pamb;
-          segment = "At ambient";
-        } else if (cabAlt_sched <= cruiseCabin_m) {
-          // Still approaching cruise cabin
-          Pdesired = isaPressurePa(cabAlt_sched);
-          segment = "Climbing cabin";
-    
-        } else {
-          // Above cruise cabin alt: hold at cruise cabin pressure
-          Pdesired = Pcruise_Pa;
-          segment = "Holding at cruise cabin";
-        }
-      }
-    
-  // Enforce ΔP once, globally
-  const Pcabin_limited = Math.min(Pdesired, Pamb + dPmax_Pa);
-  
-  // Label when the ΔP limit is hit
-  if (Pcabin_limited === (Pamb + dPmax_Pa)) {
-    segment = (mode === "jet")
-      ? "ΔP max (constant ΔP)"
-      : "ΔP max reached — WARNING";
-  }
-  
-  // Optional legacy label for ramped schedule
-  if (mode === "ramped" && Pcabin_limited !== (Pamb + dPmax_Pa) && Pcabin_limited !== Pset) {
-    segment = "Ramped schedule";
-  }
-  
-  // On ground / low altitudes, do not start below ambient
-  if (airAlt_m <= cabinSet_m && mode !== "failed") {
-    return { Pcabin: Pamb, segment: "At ambient" };
-  }
-  
-  // Default if nothing set by branches
-  if (typeof segment === "undefined") {
-    segment = "At setpoint";
-  }
-  
-  return { Pcabin: Pcabin_limited, segment };
-    }
-  }
 
   // O2 calculations
   function calcPIO2_mmHg(Ptotal_mmHg, FiO2){ const PH2O = 47; return Math.max(0, (Ptotal_mmHg - PH2O) * FiO2); }
