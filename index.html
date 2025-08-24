@@ -479,6 +479,19 @@
   // ---------- DOM ----------
   const el = id => document.getElementById(id);
 
+  function setDpMaxForMode(mode) {
+    const dpInput = document.getElementById('dPmax_psi');
+    if (!dpInput) return;
+  
+    let desiredPsi;
+    if (mode === 'ramped')      desiredPsi = 8; // Commercial-style
+    else if (mode === 'jet')    desiredPsi = 4; // Jet Fighter
+    else desiredPsi = Number(dpInput.value) || 6; // Leave as-is for other modes
+  
+    dpInput.value = desiredPsi;
+  }
+
+  
   function update(){
     console.log("UPDATE CALLED — airAlt_m is", document.getElementById('alt_m').value);
 
@@ -585,18 +598,32 @@
     riskChip.innerHTML = `<span class="${risk.cls}">DCS risk: ${risk.label}</span>`;
     } 
 
-  
+  // Mode change: set ΔP by mode, then recompute
+  const modeSelect = document.getElementById('press_profile');
+  if (modeSelect) {
+    modeSelect.addEventListener('change', (e) => {
+      setDpMaxForMode(e.target.value); // sets 8 psi for commercial-style, 4 psi for jet
+      update();                         // recompute with the new ΔP
+    });
+  }
+
   // Wire inputs
-  ['alt_m','press_profile','cabin_set_m','dPmax_psi','o2_mode','fio2','mask_over_mmHg','paco2','rq'].forEach(id=>{
-    const node = document.getElementById(id);
-    node.addEventListener('input', update);
-    node.addEventListener('change', update);
+  [ 'alt_m', 'cabin_set_m', 'dPmax_psi', 'o2_mode', 'fio2', 'mask_over_mmHg', 'paco2', 'rq' ].forEach(id => {
+  const node = document.getElementById(id);
+  node.addEventListener('input', update);
+  node.addEventListener('change', update);
   });
+
 
   document.getElementById('n2_init_preset').addEventListener('input', update);
   document.getElementById('n2_init_mmHg').addEventListener('input', update);
 
-  
+  // Apply mode-specific ΔP before the first render
+  (function initDpByMode() {
+    const modeSel = document.getElementById('press_profile');
+    if (modeSel) setDpMaxForMode(modeSel.value);
+  })();
+
   // Initial render (defaults to Failed mode and FiO2 = 0.21)
   update();
 </script>
