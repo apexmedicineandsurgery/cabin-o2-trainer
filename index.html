@@ -281,6 +281,10 @@
 <script>
   // ---------- Constants and helpers ----------
   const FT_PER_M = 3.280839895;
+  function ft_to_m(feet) {
+  return feet * 0.3048; // 1 ft = 0.3048 m
+  }
+
   const PA_PER_PSI = 6894.75729;
   const PA_PER_MMHG = 133.3223684211;
   const P0_PA = 101325;
