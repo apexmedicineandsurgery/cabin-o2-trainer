@@ -372,16 +372,21 @@
     if (airAlt_m <= eightK_m) {
       // Ambient until 8k ft
       Pdesired = Pamb;
-  
+      segment = "At ambient";
     } else if ((Pamb - P_8k_Pa) <= dPmax_Pa) {
       // Hold cabin at 8k ft until ΔP limit reached
       Pdesired = P_8k_Pa;
-  
+      segment = "Holding at 8k ft";
     } else {
       // Maintain constant ΔP above limit
       Pdesired = Pamb - dPmax_Pa;
+      segment = "ΔP max (constant ΔP)";
     }
 
+      console.log("Jet branch Pdesired:", Pdesired, "Segment:", segment);
+      // ✅ return the expected object so update() can read Pcabin
+    return { Pcabin: Pdesired, segment };
+      
    } else {
   // Commercial airliner-style pressurization:
   // 1) Below target cruise cabin altitude (e.g. 6k–8k ft), climb at reduced rate
