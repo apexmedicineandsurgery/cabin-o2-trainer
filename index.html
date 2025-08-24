@@ -87,8 +87,8 @@
           <label for="press_profile">Pressurization mode</label>
           <select id="press_profile">
             <option value="failed" selected>Failed (cabin follows ambient)</option>
-            <option value="jet">Jet-style (hold setpoint when feasible)</option>
-            <option value="ramped">Commercial-style (ramped schedule)</option>
+            <option value="jet">Jet Fighter (constant differential)</option>
+            <option value="ramped">Commercial-style (constant pressure)</option>
           </select>
           <div class="inline"><span class="badge">ΔP limit enforced (active modes)</span></div>
         </div>
@@ -243,7 +243,7 @@
       </div>
     
       <div class="note">
-        Risk thresholds will match your provided table — placeholder bands for now.
+        Risk thresholds are only based on Tissue Ratio and not M-Values and are illustrative only. Use the Air Force's ADRAC or NASA-specific models for real estimates on risk.
       </div>
     </section>
 
@@ -354,27 +354,89 @@
 
     // Desired cabin pressure by profile
     let Pdesired;
-    if (mode === "jet"){
-      Pdesired = Pset;
-    } else { // ramped
-      const k = 0.25;
-      const cabAlt_sched = cabinSet_m + k * Math.max(0, airAlt_m - cabinSet_m);
-      Pdesired = isaPressurePa(cabAlt_sched);
+    if (mode === "jet") {
+    // Fighter‑jet pressurization schedule:
+    // 1) Ambient ≤ 8k ft: unpressurized
+    // 2) Ambient > 8k ft: hold at 8k ft until ΔPmax reached
+    // 3) Above ΔPmax: climb cabin to preserve ΔPmax
+  
+    const eightK_m   = ft_to_m(8000);
+    const P_8k_Pa    = isaPressurePa(eightK_m);
+  
+    if (airAlt_m <= eightK_m) {
+      // Ambient until 8k ft
+      Pdesired = Pamb;
+  
+    } else if ((Pamb - P_8k_Pa) <= dPmax_Pa) {
+      // Hold cabin at 8k ft until ΔP limit reached
+      Pdesired = P_8k_Pa;
+  
+    } else {
+      // Maintain constant ΔP above limit
+      Pdesired = Pamb - dPmax_Pa;
     }
+  } } else {
+  // Commercial airliner-style pressurization:
+  // 1) Below target cruise cabin altitude (e.g. 6k–8k ft), climb at reduced rate
+  // 2) Hold cabin constant once cruise cabin reached
+  // 3) If ΔPmax exceeded above that, trigger constant ΔP warning
 
-    // Enforce ΔP: Pcabin <= Pamb + dPmax
-    const Pcabin_limited = Math.min(Pdesired, Pamb + dPmax_Pa);
+  const cruiseCabin_m = cabinSet_m;                  // target cabin cruise alt in m
+  const Pcruise_Pa    = isaPressurePa(cruiseCabin_m);
 
-    let segment = "At setpoint";
-    if (Pcabin_limited === (Pamb + dPmax_Pa)) segment = "ΔP max (constant ΔP)";
-    if (mode === "ramped" && Pcabin_limited !== (Pamb + dPmax_Pa) && Pcabin_limited !== Pset) segment = "Ramped schedule";
+  if (airAlt_m <= cruiseCabin_m) {
+    // Ambient to cruise cabin
+    Pdesired = Pamb;
+    segment = "At ambient";
 
-    // On ground / low altitudes, do not start below ambient
-    if (airAlt_m <= cabinSet_m && mode !== "failed"){
-      return { Pcabin: Pamb, segment: "At ambient" };
-    }
-    return { Pcabin: Pcabin_limited, segment };
+      } else {
+        // Climb cabin altitude at reduced rate until hitting cruise cabin pressure
+        const rateFactor = 0.25; // 25% of aircraft climb rate
+        const cabAlt_sched = cruiseCabin_m + rateFactor * Math.max(0, airAlt_m - cruiseCabin_m);
+    
+        if (cabAlt_sched < cruiseCabin_m) {
+          // Shouldn’t happen, but sanity check
+          Pdesired = Pamb;
+          segment = "At ambient";
+        } else if (cabAlt_sched <= cruiseCabin_m) {
+          // Still approaching cruise cabin
+          Pdesired = isaPressurePa(cabAlt_sched);
+          segment = "Climbing cabin";
+    
+        } else {
+          // Above cruise cabin alt: hold at cruise cabin pressure
+          Pdesired = Pcruise_Pa;
+          segment = "Holding at cruise cabin";
+        }
+      }
+    
+  // Enforce ΔP once, globally
+  const Pcabin_limited = Math.min(Pdesired, Pamb + dPmax_Pa);
+  
+  // Label when the ΔP limit is hit
+  if (Pcabin_limited === (Pamb + dPmax_Pa)) {
+    segment = (mode === "jet")
+      ? "ΔP max (constant ΔP)"
+      : "ΔP max reached — WARNING";
   }
+  
+  // Optional legacy label for ramped schedule
+  if (mode === "ramped" && Pcabin_limited !== (Pamb + dPmax_Pa) && Pcabin_limited !== Pset) {
+    segment = "Ramped schedule";
+  }
+  
+  // On ground / low altitudes, do not start below ambient
+  if (airAlt_m <= cabinSet_m && mode !== "failed") {
+    return { Pcabin: Pamb, segment: "At ambient" };
+  }
+  
+  // Default if nothing set by branches
+  if (typeof segment === "undefined") {
+    segment = "At setpoint";
+  }
+  
+  return { Pcabin: Pcabin_limited, segment };
+
 
   // O2 calculations
   function calcPIO2_mmHg(Ptotal_mmHg, FiO2){ const PH2O = 47; return Math.max(0, (Ptotal_mmHg - PH2O) * FiO2); }
