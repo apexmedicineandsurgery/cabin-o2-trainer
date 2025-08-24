@@ -394,62 +394,47 @@
   // 2) Hold cabin constant once cruise cabin reached
   // 3) If ΔPmax exceeded above that, trigger constant ΔP warning
 
-  const cruiseCabin_m = cabinSet_m;                  // target cabin cruise alt in m
+  const cruiseCabin_m = cabinSet_m;
   const Pcruise_Pa    = isaPressurePa(cruiseCabin_m);
 
-  if (airAlt_m <= cruiseCabin_m) {
-    // Ambient to cruise cabin
-    Pdesired = Pamb;
-    segment = "At ambient";
+  // Cabin climb rate: 400 ft/min (convert to meters)
+  const CABIN_CLIMB_RATE_FT_PER_MIN = 400;
+  const CABIN_CLIMB_RATE_M_PER_MIN = CABIN_CLIMB_RATE_FT_PER_MIN * 0.3048;
 
-      } else {
-        // Climb cabin altitude at reduced rate until hitting cruise cabin pressure
-        const rateFactor = 0.25; // 25% of aircraft climb rate
-        const cabAlt_sched = cruiseCabin_m + rateFactor * Math.max(0, airAlt_m - cruiseCabin_m);
-    
-        if (cabAlt_sched < cruiseCabin_m) {
-          // Shouldn’t happen, but sanity check
-          Pdesired = Pamb;
-          segment = "At ambient";
-        } else if (cabAlt_sched <= cruiseCabin_m) {
-          // Still approaching cruise cabin
-          Pdesired = isaPressurePa(cabAlt_sched);
-          segment = "Climbing cabin";
-    
-        } else {
-          // Above cruise cabin alt: hold at cruise cabin pressure
-          Pdesired = Pcruise_Pa;
-          segment = "Holding at cruise cabin";
-        }
-      }
-    
-  // Enforce ΔP once, globally
+  // Assume a typical aircraft climb rate, e.g., 2000 ft/min
+  const AIRCRAFT_CLIMB_RATE_FT_PER_MIN = 2000;
+  const AIRCRAFT_CLIMB_RATE_M_PER_MIN = AIRCRAFT_CLIMB_RATE_FT_PER_MIN * 0.3048;
+
+  // For each meter aircraft ascends, cabin ascends at (cabin_rate/aircraft_rate)
+  const rateFactor = CABIN_CLIMB_RATE_M_PER_MIN / AIRCRAFT_CLIMB_RATE_M_PER_MIN; // e.g., 0.2
+
+  // Compute scheduled cabin altitude
+  let cabAlt_sched = cruiseCabin_m + rateFactor * Math.max(0, airAlt_m - cruiseCabin_m);
+  // Clamp cabin altitude: can't exceed aircraft altitude or cruiseCabin_m
+  cabAlt_sched = Math.min(cabAlt_sched, airAlt_m, cruiseCabin_m);
+
+  const Pdesired = isaPressurePa(cabAlt_sched);
+
+  // Enforce ΔP limit
+  const dPmax_Pa = psi_to_Pa(dPmax_psi);
   const Pcabin_limited = Math.min(Pdesired, Pamb + dPmax_Pa);
-  
-  // Label when the ΔP limit is hit
+
+  let segment;
   if (Pcabin_limited === (Pamb + dPmax_Pa)) {
-    segment = (mode === "jet")
-      ? "ΔP max (constant ΔP)"
-      : "ΔP max reached — WARNING";
+    segment = "ΔP max reached — WARNING";
+  } else if (cabAlt_sched < cruiseCabin_m) {
+    segment = "Climbing cabin";
+  } else {
+    segment = "Holding at cruise cabin";
   }
-  
-  // Optional legacy label for ramped schedule
-  if (mode === "ramped" && Pcabin_limited !== (Pamb + dPmax_Pa) && Pcabin_limited !== Pset) {
-    segment = "Ramped schedule";
-  }
-  
+
   // On ground / low altitudes, do not start below ambient
-  if (airAlt_m <= cabinSet_m && mode !== "failed") {
+  if (airAlt_m <= cruiseCabin_m) {
     return { Pcabin: Pamb, segment: "At ambient" };
   }
-  
-  // Default if nothing set by branches
-  if (typeof segment === "undefined") {
-    segment = "At setpoint";
-  }
-  
+
   return { Pcabin: Pcabin_limited, segment };
-    }
+  }
   }
 
   // O2 calculations
