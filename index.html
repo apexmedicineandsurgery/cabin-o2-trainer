@@ -409,7 +409,9 @@
   const rateFactor = CABIN_CLIMB_RATE_M_PER_MIN / AIRCRAFT_CLIMB_RATE_M_PER_MIN; // e.g., 0.2
 
   // Compute scheduled cabin altitude
-  let cabAlt_sched = cruiseCabin_m + rateFactor * Math.max(0, airAlt_m - cruiseCabin_m);
+  let cabAlt_sched = airAlt_m * rateFactor;
+  cabAlt_sched = Math.min(cabAlt_sched, cruiseCabin_m, airAlt_m);
+  
   // Clamp cabin altitude: can't exceed aircraft altitude or cruiseCabin_m
   cabAlt_sched = Math.min(cabAlt_sched, airAlt_m, cruiseCabin_m);
 
