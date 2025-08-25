@@ -272,17 +272,49 @@
         </div>
       </div>
     
-      <!-- NEW: Boyle's Law visual balloons -->
+      <!-- Boyle’s Law balloons (centered with sea-level baseline) -->
       <div class="row" style="align-items:center; gap:2rem; margin-top:12px;">
-        <svg id="boyleViz" width="220" height="110" aria-label="Boyle's Law balloons">
-          <!-- Cabin -->
-          <circle id="cabinCircle" cx="60" cy="55" r="20" fill="#4a90e2" />
-          <text x="60" y="100" text-anchor="middle" fill="#b7c1ff" font-size="11">Cabin</text>
-          <!-- Ambient -->
-          <circle id="ambientCircle" cx="160" cy="55" r="20" fill="#7ed321" />
-          <text x="160" y="100" text-anchor="middle" fill="#b7c1ff" font-size="11">Ambient</text>
+        <svg id="boyleViz"
+             viewBox="0 0 200 200"
+             width="220"
+             height="220"
+             preserveAspectRatio="xMidYMid meet"
+             aria-label="Boyle's Law balloons">
+          <g>
+            <!-- Baseline (sea-level 1.0×) -->
+            <circle id="baselineCircle"
+                    cx="100" cy="100" r="40"
+                    fill="none"
+                    stroke="#888"
+                    stroke-width="2"
+                    stroke-dasharray="4,3" />
+      
+            <!-- Cabin (dynamic) -->
+            <circle id="cabinCircle"
+                    cx="100" cy="100" r="40"
+                    fill="rgba(74,144,226,0.12)"
+                    stroke="#4a90e2"
+                    stroke-width="2" />
+      
+            <!-- Ambient (dynamic) -->
+            <circle id="ambientCircle"
+                    cx="100" cy="100" r="40"
+                    fill="rgba(126,211,33,0.10)"
+                    stroke="#7ed321"
+                    stroke-width="2" />
+          </g>
+      
+          <!-- Legend -->
+          <g font-size="11" fill="#b7c1ff">
+            <rect x="30" y="172" width="12" height="6" fill="#4a90e2" />
+            <text x="52" y="178" dominant-baseline="middle">Cabin</text>
+      
+            <rect x="110" y="172" width="12" height="6" fill="#7ed321" />
+            <text x="132" y="178" dominant-baseline="middle">Ambient</text>
+          </g>
         </svg>
       </div>
+
     
       <div class="note">Computed as P₀ / P, where P₀ = 760 mmHg.</div>
       </section>
@@ -331,21 +363,29 @@
   // --- Boyle's Law visual updater ---
   // Scale circles from relative volume via radius ∝ volume^(1/3)
   function updateBoyleVisuals(relCabin, relAmbient) {
-    const cabinEl = document.getElementById("cabinCircle");
-    const ambEl = document.getElementById("ambientCircle");
-    if (!cabinEl || !ambEl) return;
+    const baselineEl = document.getElementById("baselineCircle");
+    const cabinEl    = document.getElementById("cabinCircle");
+    const ambientEl  = document.getElementById("ambientCircle");
+    if (!baselineEl || !cabinEl || !ambientEl) return;
   
-    const baseR = 20;            // radius at sea level (1.00×)
-    const minR = 8;              // avoid disappearing at extreme pressure
-    const maxR = 46;             // keep inside SVG
-    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    // Sea-level radius (1.0× reference) matches the SVG baseline ring
+    const baseR = 40;
   
-    const rCabin = clamp(baseR * Math.cbrt(Math.max(relCabin, 0)), minR, maxR);
-    const rAmb   = clamp(baseR * Math.cbrt(Math.max(relAmbient, 0)), minR, maxR);
+    // Radius should scale with cube root of volume multiple
+    const scaleR = v => Math.cbrt(Math.max(v, 0));
   
-    cabinEl.setAttribute("r", rCabin);
-    ambEl.setAttribute("r", rAmb);
+    // Gentle clamping so visuals don’t disappear or dwarf the box
+    const rc = Math.min(Math.max(scaleR(relCabin),   0.4), 3.0);
+    const ra = Math.min(Math.max(scaleR(relAmbient), 0.4), 3.0);
+  
+    // Keep baseline at 1.0×
+    baselineEl.setAttribute("r", String(baseR));
+  
+    // Dynamic radii
+    cabinEl.setAttribute("r",   String(baseR * rc));
+    ambientEl.setAttribute("r", String(baseR * ra));
   }
+
 
   
   function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
