@@ -66,7 +66,7 @@
 
   /* NEW: Boyle's Law balloon animation */
   #boyleViz circle {
-    transition: r 0.5s ease;
+    transition: r 140ms ease-out;
   }
   
 </style>
@@ -272,50 +272,46 @@
         </div>
       </div>
     
-      <!-- Boyle’s Law balloons (centered with sea-level baseline) -->
+      <!-- Boyle’s Law Visuals -->
       <div class="row" style="align-items:center; gap:2rem; margin-top:12px;">
         <svg id="boyleViz"
-             viewBox="0 0 200 200"
-             width="220"
-             height="220"
+             viewBox="0 0 300 140"
+             width="100%"
+             height="160"
              preserveAspectRatio="xMidYMid meet"
-             aria-label="Boyle's Law balloons">
-          <g>
-            <!-- Baseline (sea-level 1.0×) -->
-            <circle id="baselineCircle"
-                    cx="100" cy="100" r="40"
-                    fill="none"
-                    stroke="#888"
-                    stroke-width="2"
-                    stroke-dasharray="4,3" />
+             aria-label="Boyle's Law bubbles">
+          <!-- Left: Cabin (dynamic) -->
+          <circle id="cabinCircle"
+                  cx="50" cy="60" r="32"
+                  fill="rgba(74,144,226,0.12)"
+                  stroke="#4a90e2"
+                  stroke-width="2" />
       
-            <!-- Cabin (dynamic) -->
-            <circle id="cabinCircle"
-                    cx="100" cy="100" r="40"
-                    fill="rgba(74,144,226,0.12)"
-                    stroke="#4a90e2"
-                    stroke-width="2" />
+          <!-- Middle: Sea level (fixed baseline) -->
+          <circle id="baselineCircle"
+                  cx="150" cy="60" r="32"
+                  fill="none"
+                  stroke="#888"
+                  stroke-width="2"
+                  stroke-dasharray="4,3" />
       
-            <!-- Ambient (dynamic) -->
-            <circle id="ambientCircle"
-                    cx="100" cy="100" r="40"
-                    fill="rgba(126,211,33,0.10)"
-                    stroke="#7ed321"
-                    stroke-width="2" />
-          </g>
+          <!-- Right: Ambient (dynamic) -->
+          <circle id="ambientCircle"
+                  cx="250" cy="60" r="32"
+                  fill="rgba(255, 193, 7, 0.12)"
+                  stroke="#ffb84d"
+                  stroke-width="2" />
       
-          <!-- Legend -->
-          <g font-size="11" fill="#b7c1ff">
-            <rect x="30" y="172" width="12" height="6" fill="#4a90e2" />
-            <text x="52" y="178" dominant-baseline="middle">Cabin</text>
-      
-            <rect x="110" y="172" width="12" height="6" fill="#7ed321" />
-            <text x="132" y="178" dominant-baseline="middle">Ambient</text>
+          <!-- Labels -->
+          <g font-size="11" fill="var(--muted, #9aa3b2)">
+            <text x="50"  y="120" text-anchor="middle">Cabin</text>
+            <text x="150" y="120" text-anchor="middle">Sea level</text>
+            <text x="250" y="120" text-anchor="middle">Ambient</text>
           </g>
         </svg>
       </div>
 
-    
+      
       <div class="note">Computed as P₀ / P, where P₀ = 760 mmHg.</div>
       </section>
 
@@ -361,32 +357,32 @@
   }
 
   // --- Boyle's Law visual updater ---
-  // Scale circles from relative volume via radius ∝ volume^(1/3)
   function updateBoyleVisuals(relCabin, relAmbient) {
-    const baselineEl = document.getElementById("baselineCircle");
     const cabinEl    = document.getElementById("cabinCircle");
+    const baselineEl = document.getElementById("baselineCircle");
     const ambientEl  = document.getElementById("ambientCircle");
-    if (!baselineEl || !cabinEl || !ambientEl) return;
+    if (!cabinEl || !baselineEl || !ambientEl) return;
   
-    // Sea-level radius (1.0× reference) matches the SVG baseline ring
-    const baseR = 40;
+    // Sea-level bubble radius (must match the baselineCircle r in the SVG)
+    const baseR = 32;
   
-    // Radius should scale with cube root of volume multiple
-    const scaleR = v => Math.cbrt(Math.max(v, 0));
+    // Clamp multipliers to avoid disappearing dots or runaway circles
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    const vc = clamp(relCabin,   0.2, 6.0);
+    const va = clamp(relAmbient, 0.2, 6.0);
   
-    // Gentle clamping so visuals don’t disappear or dwarf the box
-    const rc = Math.min(Math.max(scaleR(relCabin),   0.4), 3.0);
-    const ra = Math.min(Math.max(scaleR(relAmbient), 0.4), 3.0);
+    // Make circle AREA track “volume multiple” => radius ∝ sqrt(volume multiple)
+    const rFromV = v => baseR * Math.sqrt(v);
   
-    // Keep baseline at 1.0×
+    // Middle: fixed sea-level
     baselineEl.setAttribute("r", String(baseR));
   
-    // Dynamic radii
-    cabinEl.setAttribute("r",   String(baseR * rc));
-    ambientEl.setAttribute("r", String(baseR * ra));
+    // Left: cabin (dynamic)
+    cabinEl.setAttribute("r", String(rFromV(vc)));
+  
+    // Right: ambient (dynamic)
+    ambientEl.setAttribute("r", String(rFromV(va)));
   }
-
-
   
   function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
   function fmt(n, d=2){ return Number.isFinite(n) ? n.toFixed(d) : "—"; }
