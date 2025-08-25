@@ -347,97 +347,58 @@
   }
 
   // Pressurization modes
-  function computeCabinPressurePa(airAlt_m, mode, cabinSet_m, dPmax_psi){
-    console.log("Mode is:", mode);
-
-    const Pamb = isaPressurePa(airAlt_m);
-    if (mode === "failed"){
-      return { Pcabin: Pamb, segment: "At ambient" };
-    }
-
-    const Pset = isaPressurePa(cabinSet_m);
-    const dPmax_Pa = psi_to_Pa(dPmax_psi);
-
-    // Desired cabin pressure by profile
-    let Pdesired;
-    if (mode === "jet") {
-    // Fighter‑jet pressurization schedule:
-    // 1) Ambient ≤ 8k ft: unpressurized
-    // 2) Ambient > 8k ft: hold at 8k ft until ΔPmax reached
-    // 3) Above ΔPmax: climb cabin to preserve ΔPmax
-  
-    const eightK_m   = ft_to_m(8000);
-    const P_8k_Pa    = isaPressurePa(eightK_m);
-  
-    if (airAlt_m <= eightK_m) {
-      // Ambient until 8k ft
-      Pdesired = Pamb;
-      segment = "At ambient";
-    } else if ((P_8k_Pa - Pamb) <= dPmax_Pa) {
-
-      // Hold cabin at 8k ft until ΔP limit reached
-      Pdesired = P_8k_Pa;
-      segment = "Holding at 8k ft";
-    } else {
-      // Maintain constant ΔP above limit
-      Pdesired = Pamb + dPmax_Pa;
-      segment = "ΔP max (constant ΔP)";
-    }
-
-      console.log("Jet branch Pdesired:", Pdesired, "Segment:", segment);
-      // ✅ return the expected object so update() can read Pcabin
-    return { Pcabin: Pdesired, segment };
-      
-   } else {
-  // Commercial airliner-style pressurization:
-  // 1) Below target cruise cabin altitude (e.g. 6k–8k ft), climb at reduced rate
-  // 2) Hold cabin constant once cruise cabin reached
-  // 3) If ΔPmax exceeded above that, trigger constant ΔP warning
-
-  const cruiseCabin_m = cabinSet_m;
-  const Pcruise_Pa    = isaPressurePa(cruiseCabin_m);
-
-  // Cabin climb rate: 400 ft/min (convert to meters)
-  const CABIN_CLIMB_RATE_FT_PER_MIN = 400;
-  const CABIN_CLIMB_RATE_M_PER_MIN = CABIN_CLIMB_RATE_FT_PER_MIN * 0.3048;
-
-  // Assume a typical aircraft climb rate, e.g., 2000 ft/min
-  const AIRCRAFT_CLIMB_RATE_FT_PER_MIN = 2000;
-  const AIRCRAFT_CLIMB_RATE_M_PER_MIN = AIRCRAFT_CLIMB_RATE_FT_PER_MIN * 0.3048;
-
-  // For each meter aircraft ascends, cabin ascends at (cabin_rate/aircraft_rate)
-  const rateFactor = CABIN_CLIMB_RATE_M_PER_MIN / AIRCRAFT_CLIMB_RATE_M_PER_MIN; // e.g., 0.2
-
-  // Compute scheduled cabin altitude
-  let cabAlt_sched = airAlt_m * rateFactor;
-  cabAlt_sched = Math.min(cabAlt_sched, cruiseCabin_m, airAlt_m);
-  
-  // Clamp cabin altitude: can't exceed aircraft altitude or cruiseCabin_m
-  cabAlt_sched = Math.min(cabAlt_sched, airAlt_m, cruiseCabin_m);
-
-  const Pdesired = isaPressurePa(cabAlt_sched);
-
-  // Enforce ΔP limit
+ function computeCabinPressurePa(airAlt_m, mode, cabinSet_m, dPmax_psi) {
+  const Pamb = isaPressurePa(airAlt_m);
+  const Pset = isaPressurePa(cabinSet_m);
   const dPmax_Pa = psi_to_Pa(dPmax_psi);
-  const Pcabin_limited = Math.min(Pdesired, Pamb + dPmax_Pa);
+  const P0 = P0_PA; // ISA sea-level pressure
 
-  let segment;
-  if (Pcabin_limited === (Pamb + dPmax_Pa)) {
-    segment = "ΔP max reached — WARNING";
-  } else if (cabAlt_sched < cruiseCabin_m) {
-    segment = "Climbing cabin";
-  } else {
-    segment = "Holding at cruise cabin";
-  }
+  let Pcabin, segment;
 
-  // On ground / low altitudes, do not start below ambient
-  if (airAlt_m <= cruiseCabin_m) {
+  // Fail-safe: cabin equals ambient
+  if (mode === "failed") {
     return { Pcabin: Pamb, segment: "At ambient" };
   }
 
-  return { Pcabin: Pcabin_limited, segment };
+  // Existing fighter/jet schedule preserved
+  if (mode === "jet") {
+    const eightK_m = ft_to_m(8000);
+    const P_8k = isaPressurePa(eightK_m);
+
+    if (airAlt_m <= eightK_m) {
+      Pcabin = Pamb;
+      segment = "At ambient";
+    } else if ((P_8k - Pamb) <= dPmax_Pa) {
+      Pcabin = P_8k;
+      segment = "Holding at 8k ft";
+    } else {
+      Pcabin = Pamb + dPmax_Pa;
+      segment = "ΔP max (constant ΔP)";
+    }
+    return { Pcabin, segment };
   }
+
+  // Commercial schedule (3 phases):
+  // 1) From sea level, cabin pressure changes 1/4 as much as ambient (toward ambient),
+  //    but never below the set-cabin pressure.
+  const Pquarter = P0 + 0.25 * (Pamb - P0);     // quarter of ambient change from sea level
+  const Pphase1 = Math.max(Pquarter, Pset);     // clamp: don't go below (i.e., more depressurized than) set
+
+  // 2) Hold at set cabin pressure until ΔP hits the limit.
+  // 3) If ΔP would exceed limit, switch to constant-ΔP (i.e., 1:1 with ambient changes).
+  if ((Pphase1 - Pamb) > dPmax_Pa) {
+    Pcabin = Pamb + dPmax_Pa;
+    segment = "ΔP max (1:1 with ambient)";
+  } else {
+    Pcabin = Pphase1;
+    segment = (Pcabin > Pset)
+      ? "Quarter-track (1:4 to setpoint)"
+      : "Holding at set cabin altitude";
   }
+
+  return { Pcabin, segment };
+  }
+
 
   // O2 calculations
   function calcPIO2_mmHg(Ptotal_mmHg, FiO2){ const PH2O = 47; return Math.max(0, (Ptotal_mmHg - PH2O) * FiO2); }
