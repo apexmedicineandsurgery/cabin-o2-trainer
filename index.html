@@ -743,12 +743,11 @@
   if (n2Init) n2Init.addEventListener('input', update);
   
   // new: pre-breathe control
-  const pbNode = document.getElementById('prebreathe_min');
-  if (pbNode) {
-    pbNode.addEventListener('input', update);
-    pbNode.addEventListener('change', update);
+  const pbInput = document.getElementById('prebreathe_min');
+  if (pbInput) {
+    pbInput.addEventListener('input', update);
+    pbInput.addEventListener('change', update);
   }
-
 
   // Apply mode-specific ΔP before the first render
   (function initDpByMode() {
