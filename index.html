@@ -380,24 +380,30 @@
 
   // Commercial schedule (3 phases):
   // 1) From sea level, cabin pressure changes 1/4 as much as ambient (toward ambient),
-  //    but never below the set-cabin pressure.
-  const Pquarter = P0 + 0.25 * (Pamb - P0);     // quarter of ambient change from sea level
-  const Pphase1 = Math.max(Pquarter, Pset);     // clamp: don't go below (i.e., more depressurized than) set
+  if (mode === "ramped") {
+    const Pquarter = P0 + 0.25 * (Pamb - P0); // 1:4 track from SL
+    const reachedSet = Pquarter <= Pset;
 
-  // 2) Hold at set cabin pressure until ΔP hits the limit.
-  // 3) If ΔP would exceed limit, switch to constant-ΔP (i.e., 1:1 with ambient changes).
-  if ((Pphase1 - Pamb) > dPmax_Pa) {
-    Pcabin = Pamb + dPmax_Pa;
-    segment = "ΔP max (1:1 with ambient)";
-  } else {
-    Pcabin = Pphase1;
-    segment = (Pcabin > Pset)
-      ? "Quarter-track (1:4 to setpoint)"
-      : "Holding at set cabin altitude";
+    if (!reachedSet) {
+        // Phase 1: still above setpoint, so follow 1:4 schedule
+        Pcabin = Pquarter;
+        segment = "Quarter-track (1:4 toward setpoint)";
+    } else {
+        // At or below setpoint: Phase 2 or Phase 3
+        const dP_now = Pset - Pamb;
+        if (dP_now <= dPmax_Pa) {
+            // Phase 2: hold at set cabin pressure
+            Pcabin = Pset;
+            segment = "Holding at set cabin altitude";
+        } else {
+            // Phase 3: ΔP max hit — constant ΔP with ambient
+            Pcabin = Pamb + dPmax_Pa;
+            segment = "ΔP max (constant ΔP)";
+        }
+    }
+    return { Pcabin, segment };
   }
 
-  return { Pcabin, segment };
-  }
 
 
   // O2 calculations
