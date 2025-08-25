@@ -275,39 +275,28 @@
       <!-- Boyle’s Law Visuals -->
       <div class="row" style="align-items:center; gap:2rem; margin-top:12px;">
         <svg id="boyleViz"
-             viewBox="0 0 300 140"
-             width="100%"
-             height="160"
-             preserveAspectRatio="xMidYMid meet"
-             aria-label="Boyle's Law bubbles">
-          <!-- Left: Cabin (dynamic) -->
-          <circle id="cabinCircle"
-                  cx="50" cy="60" r="32"
-                  fill="rgba(74,144,226,0.12)"
-                  stroke="#4a90e2"
-                  stroke-width="2" />
+           viewBox="0 0 360 140"
+           width="100%" height="160"
+           preserveAspectRatio="xMidYMid meet">
       
-          <!-- Middle: Sea level (fixed baseline) -->
-          <circle id="baselineCircle"
-                  cx="150" cy="60" r="32"
-                  fill="none"
-                  stroke="#888"
-                  stroke-width="2"
-                  stroke-dasharray="4,3" />
+        <!-- Left: Cabin -->
+        <circle id="cabinCircle"
+                cx="70" cy="60" r="32" ... />
       
-          <!-- Right: Ambient (dynamic) -->
-          <circle id="ambientCircle"
-                  cx="250" cy="60" r="32"
-                  fill="rgba(255, 193, 7, 0.12)"
-                  stroke="#ffb84d"
-                  stroke-width="2" />
+        <!-- Middle: Sea level -->
+        <circle id="baselineCircle"
+                cx="180" cy="60" r="32" ... />
       
-          <!-- Labels -->
-          <g font-size="11" fill="var(--muted, #9aa3b2)">
-            <text x="50"  y="120" text-anchor="middle">Cabin</text>
-            <text x="150" y="120" text-anchor="middle">Sea level</text>
-            <text x="250" y="120" text-anchor="middle">Ambient</text>
-          </g>
+        <!-- Right: Ambient -->
+        <circle id="ambientCircle"
+                cx="290" cy="60" r="32" ... />
+      
+        <!-- Labels -->
+        <g font-size="11" fill="var(--muted, #9aa3b2)">
+          <text x="70"  y="120" text-anchor="middle">Cabin</text>
+          <text x="180" y="120" text-anchor="middle">Sea level</text>
+          <text x="290" y="120" text-anchor="middle">Ambient</text>
+        </g>
         </svg>
       </div>
 
