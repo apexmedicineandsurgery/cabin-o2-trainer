@@ -381,7 +381,7 @@
   // Commercial schedule (3 phases):
   // 1) From sea level, cabin pressure changes 1/4 as much as ambient (toward ambient),
   if (mode === "ramped") {
-    const Pquarter = P0 + 0.25 * (Pamb - P0);
+    const Pquarter = P0 + 0.5 * (Pamb - P0);
     const reachedSet = Pquarter <= Pset;
 
     if (!reachedSet) {
