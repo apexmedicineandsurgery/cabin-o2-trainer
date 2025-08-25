@@ -68,6 +68,14 @@
   #boyleViz circle {
     transition: r 140ms ease-out;
   }
+
+    /* NEW: DCS M Value Information */
+  .compact th, .compact td { padding: 4px 8px; text-align: right; }
+  .compact th:first-child, .compact td:first-child { text-align: left; }
+  .risk-low  { background:#e6f7ec; color:#1e7f3f; padding:2px 6px; border-radius:4px; }
+  .risk-med  { background:#fff6e6; color:#8a5a00; padding:2px 6px; border-radius:4px; }
+  .risk-high { background:#ffebee; color:#b71c1c; padding:2px 6px; border-radius:4px; }
+
   
 </style>
 </head>
@@ -214,9 +222,10 @@
       </div>
     </section>
 
-    <!-- Henry’s Law + DCS -->
+    <!-- Pre-breathe + Multi-Compartment DCS Risk (worst-case) -->
     <section class="card span-12">
-      <h2>Henry’s Law + DCS Risk</h2>
+      <h2>DCS Risk (Pre‑breathe + Multi‑Compartment M‑values)</h2>
+    
       <div class="row">
         <div>
           <label for="n2_init_preset">Initial N₂ saturation preset</label>
@@ -230,29 +239,28 @@
           <input id="n2_init_mmHg" type="number" value="563" min="0" max="1200" step="1" />
           <div class="inline muted">Default ≈ (760 − 47) × 0.79</div>
         </div>
+        <div>
+          <label for="prebreathe_min">Pre‑breathe (100% O₂ at sea level, minutes)</label>
+          <input id="prebreathe_min" type="number" min="0" step="1" value="0" />
+          <div class="inline muted">Worst‑case: tissues frozen after pre‑breathe; real off‑gassing in flight would reduce risk.</div>
+        </div>
       </div>
     
       <div class="divider"></div>
     
-      <div class="row">
-        <div class="status-chip">
-          <span class="mono">Inspired N₂ (current)</span>
-          <span class="strong" id="pn2_current">— mmHg</span>
-        </div>
-        <div class="status-chip">
-          <span class="mono">Tissue Ratio</span>
-          <span class="strong" id="tissue_ratio">—</span>
-        </div>
-        <div class="status-chip" id="dcs_risk_chip">
-          <span class="badge">DCS risk: —</span>
-        </div>
-      </div>
-    
-      <div class="note">
-        Risk thresholds are only based on Tissue Ratio and not M-Values and are illustrative only. Use the Air Force's ADRAC or NASA-specific models for real estimates on risk.
-      </div>
+      <table class="compact" style="margin-top:8px; width:100%;">
+        <thead>
+          <tr>
+            <th>Half‑time</th>
+            <th>Current PN₂</th>
+            <th>M‑value</th>
+            <th>Risk ratio</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="risk_tbody"></tbody>
+      </table>
     </section>
-
     
     <!-- Boyle’s law -->
     <section class="card span-12">
@@ -520,6 +528,82 @@
     dpInput.value = desiredPsi;
   }
 
+  // --- Multi-compartment DCS model (worst-case) ---
+
+    const MMHG_PER_BAR = 750.062; // 1 bar ≈ 750.062 mmHg
+    const ln2 = Math.log(2);
+    
+    // Bühlmann ZHL-16C (N2) constants in bar (a) and unitless (b)
+    const Models = {
+      ZHL16C_N2: {
+        name: "Bühlmann ZHL‑16C (N₂)",
+        halfTimes_min: [4.0,5.0,8.0,12.5,18.5,27.0,38.3,54.3,77.0,109.0,146.0,187.0,239.0,305.0,390.0,498.0],
+        a_bar: [1.1696,1.0000,0.8618,0.7562,0.6667,0.5933,0.5282,0.4701,0.4187,0.3798,0.3497,0.3223,0.2971,0.2737,0.2523,0.2327],
+        b:     [0.5578,0.6514,0.7222,0.7825,0.8126,0.8434,0.8693,0.8910,0.9092,0.9222,0.9319,0.9403,0.9477,0.9544,0.9602,0.9653]
+      }
+    };
+    
+    const DCSState = {
+      model: Models.ZHL16C_N2,
+      frozenPN2_mmHg: null,   // array of 16 PN2 values after pre-breathe
+      prebreathe_min: 0
+    };
+    
+    // Exponential N2 washout during pre-breathe (100% O2 at sea level)
+    function prebreatheWashout_mmHg(model, t_min, PN2_start_mmHg, PN2_alv_mmHg = 0) {
+      return model.halfTimes_min.map(T =>
+        PN2_alv_mmHg + (PN2_start_mmHg - PN2_alv_mmHg) * Math.exp(-ln2 * t_min / T)
+      );
+    }
+    
+    // Tolerated tissue PN2 ("M-value") at current ambient (returns mmHg)
+    function toleratedPN2_mmHg(model, idx, Pamb_mmHg) {
+      const Pamb_bar = Pamb_mmHg / MMHG_PER_BAR;
+      const M_bar = model.a_bar[idx] + model.b[idx] * Pamb_bar;
+      return M_bar * MMHG_PER_BAR;
+    }
+    
+    function riskFromMRatio(R) {
+      if (R >= 1.0) return { label: "Exceeds M", cls: "risk-high" };
+      if (R >= 0.8) return { label: "Near limit", cls: "risk-med" };
+      return { label: "Low", cls: "risk-low" };
+    }
+    
+    function runPrebreatheAndFreeze(PN2_start_mmHg, prebreathe_min) {
+      const m = DCSState.model;
+      DCSState.prebreathe_min = prebreathe_min;
+      DCSState.frozenPN2_mmHg = prebreatheWashout_mmHg(m, prebreathe_min, PN2_start_mmHg, 0);
+    }
+    
+    function computeRiskAtCabin(Pamb_mmHg) {
+      if (!DCSState.frozenPN2_mmHg) return [];
+      const m = DCSState.model;
+      return DCSState.frozenPN2_mmHg.map((PN2, i) => {
+        const M = toleratedPN2_mmHg(m, i, Pamb_mmHg);
+        const R = PN2 / M;
+        return {
+          halfTime_min: m.halfTimes_min[i],
+          PN2_mmHg: PN2,
+          M_mmHg: M,
+          ratio: R,
+          risk: riskFromMRatio(R)
+        };
+      });
+    }
+    
+    function renderRiskTable(rows) {
+      const tbody = document.getElementById("risk_tbody");
+      if (!tbody) return;
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td>${r.halfTime_min.toFixed(1)} min</td>
+          <td>${r.PN2_mmHg.toFixed(1)}</td>
+          <td>${r.M_mmHg.toFixed(1)}</td>
+          <td>${(r.ratio*100).toFixed(0)}%</td>
+          <td><span class="${r.risk.cls}">${r.risk.label}</span></td>
+        </tr>
+      `).join("");
+    }
   
   function update(){
     console.log("UPDATE CALLED — airAlt_m is", document.getElementById('alt_m').value);
@@ -609,26 +693,30 @@
     const initPreset = document.getElementById('n2_init_preset').value;
     let N2_init_mmHg = parseFloat(document.getElementById('n2_init_mmHg').value);
     
-    // Default sea-level saturation ≈ (760 − 47) × 0.79
+    // Initialize starting tissue PN2 at sea level if needed
     if (initPreset === 'sea_air' || !Number.isFinite(N2_init_mmHg)) {
       N2_init_mmHg = (760 - PH2O_MMHG) * 0.79;
     }
     
-    // Current inspired N₂ — uses total pressure at the mask + FiO₂
-    const PN2_current = calcInspiredPN2_mmHg(Pinspired_mmHg, FiO2);
+    // Read pre-breathe minutes
+    const pbNode = document.getElementById('prebreathe_min');
+    const prebreathe_min = pbNode ? Number(pbNode.value || 0) : 0;
     
-    // Tissue Ratio (TR)
-    const TR = N2_init_mmHg / PN2_current;
+    // Freeze tissues (worst-case) if first run or value changed
+    if (!DCSState.frozenPN2_mmHg || DCSState.prebreathe_min !== prebreathe_min) {
+      runPrebreatheAndFreeze(N2_init_mmHg, prebreathe_min);
+    }
     
-    // Map to risk band
-    const risk = dcsRiskFromTR(TR);
+    // Choose ambient for M-value comparison (use your cabin ambient if available)
+    const Pamb_for_M_mmHg = (typeof Pamb_mmHg === 'number') ? Pamb_mmHg : Pinspired_mmHg;
     
-    // ---- Write values into the new UI card ----
-    document.getElementById('pn2_current').textContent = PN2_current.toFixed(1) + ' mmHg';
-    document.getElementById('tissue_ratio').textContent = TR.toFixed(2);
-    const riskChip = document.getElementById('dcs_risk_chip');
-    riskChip.innerHTML = `<span class="${risk.cls}">DCS risk: ${risk.label}</span>`;
-    } 
+    // Compute per-compartment risks and render
+    const rows = computeRiskAtCabin(Pamb_for_M_mmHg);
+    renderRiskTable(rows);
+    
+    // Optional: reflect worst-compartment status in any legacy chip you kept
+    const worst = rows.reduce((acc, r) => (r.ratio > (acc?.ratio ?? -1) ? r : acc), null);
+
 
   // Mode change: set ΔP by mode, then recompute
   const modeSelect = document.getElementById('press_profile');
@@ -640,15 +728,27 @@
   }
 
   // Wire inputs
-  [ 'alt_m', 'cabin_set_m', 'dPmax_psi', 'o2_mode', 'fio2', 'mask_over_mmHg', 'paco2', 'rq' ].forEach(id => {
-  const node = document.getElementById(id);
-  node.addEventListener('input', update);
-  node.addEventListener('change', update);
+  ['alt_m','cabin_set_m','dPmax_psi','o2_mode','fio2','mask_over_mmHg','paco2','rq']
+  .forEach(id => {
+    const node = document.getElementById(id);
+    if (!node) return;
+    node.addEventListener('input', update);
+    node.addEventListener('change', update);
   });
 
+  const n2Preset = document.getElementById('n2_init_preset');
+  if (n2Preset) n2Preset.addEventListener('input', update);
+  
+  const n2Init = document.getElementById('n2_init_mmHg');
+  if (n2Init) n2Init.addEventListener('input', update);
+  
+  // new: pre-breathe control
+  const pbNode = document.getElementById('prebreathe_min');
+  if (pbNode) {
+    pbNode.addEventListener('input', update);
+    pbNode.addEventListener('change', update);
+  }
 
-  document.getElementById('n2_init_preset').addEventListener('input', update);
-  document.getElementById('n2_init_mmHg').addEventListener('input', update);
 
   // Apply mode-specific ΔP before the first render
   (function initDpByMode() {
