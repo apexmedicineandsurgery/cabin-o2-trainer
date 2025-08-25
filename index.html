@@ -214,44 +214,6 @@
       </div>
     </section>
 
-    <!-- Henry’s Law + DCS -->
-    <section class="card span-12">
-      <h2>Henry’s Law + DCS Risk</h2>
-      <div class="row">
-        <div>
-          <label for="n2_init_preset">Initial N₂ saturation preset</label>
-          <select id="n2_init_preset">
-            <option value="sea_air" selected>Sea level air (default)</option>
-            <option value="custom">Custom (enter mmHg)</option>
-          </select>
-        </div>
-        <div>
-          <label for="n2_init_mmHg">Initial saturated N₂ pressure (mmHg)</label>
-          <input id="n2_init_mmHg" type="number" value="563" min="0" max="1200" step="1" />
-          <div class="inline muted">Default ≈ (760 − 47) × 0.79</div>
-        </div>
-      </div>
-    
-      <div class="divider"></div>
-    
-      <div class="row">
-        <div class="status-chip">
-          <span class="mono">Inspired N₂ (current)</span>
-          <span class="strong" id="pn2_current">— mmHg</span>
-        </div>
-        <div class="status-chip">
-          <span class="mono">Tissue Ratio</span>
-          <span class="strong" id="tissue_ratio">—</span>
-        </div>
-        <div class="status-chip" id="dcs_risk_chip">
-          <span class="badge">DCS risk: —</span>
-        </div>
-      </div>
-    
-      <div class="note">
-        Risk thresholds are only based on Tissue Ratio and not M-Values and are illustrative only. Use the Air Force's ADRAC or NASA-specific models for real estimates on risk.
-      </div>
-    </section>
 
     
     <!-- Boyle’s law -->
@@ -338,24 +300,6 @@
   const P0_PA = 101325;
   const P0_MMHG = P0_PA / PA_PER_MMHG;
 
-    // ---- Henry's law + DCS constants/helpers ----
-  const PH2O_MMHG = 47; // Inspired water vapour pressure
-  
-  // Inspired N₂ partial pressure (mmHg) given total pressure & FiO₂
-  function calcInspiredPN2_mmHg(Ptotal_mmHg, FiO2) {
-    const FN2 = Math.max(0, 1 - FiO2);
-    return Math.max(0, (Ptotal_mmHg - PH2O_MMHG) * FN2);
-  }
-  
-  // Map Tissue Ratio to risk label + class
-  function dcsRiskFromTR(TR) {
-    if (!Number.isFinite(TR) || TR <= 0) return { label: "—", cls: "muted" };
-    if (TR <= 1.00) return { label: "Minimal", cls: "good" };
-    if (TR <= 1.50) return { label: "Low", cls: "accent2" };
-    if (TR <= 2.00) return { label: "Moderate", cls: "warn" };
-    if (TR <= 2.50) return { label: "Increased", cls: "danger" };
-    return { label: "High", cls: "danger" };
-  }
 
   // --- Boyle's Law visual updater ---
   function updateBoyleVisuals(relCabin, relAmbient) {
@@ -605,29 +549,6 @@
         : `<div class="muted">No added mask pressure.</div>`
       );
     
-    // ----- Henry's law + DCS (tissue N₂) -----
-    const initPreset = document.getElementById('n2_init_preset').value;
-    let N2_init_mmHg = parseFloat(document.getElementById('n2_init_mmHg').value);
-    
-    // Default sea-level saturation ≈ (760 − 47) × 0.79
-    if (initPreset === 'sea_air' || !Number.isFinite(N2_init_mmHg)) {
-      N2_init_mmHg = (760 - PH2O_MMHG) * 0.79;
-    }
-    
-    // Current inspired N₂ — uses total pressure at the mask + FiO₂
-    const PN2_current = calcInspiredPN2_mmHg(Pinspired_mmHg, FiO2);
-    
-    // Tissue Ratio (TR)
-    const TR = N2_init_mmHg / PN2_current;
-    
-    // Map to risk band
-    const risk = dcsRiskFromTR(TR);
-    
-    // ---- Write values into the new UI card ----
-    document.getElementById('pn2_current').textContent = PN2_current.toFixed(1) + ' mmHg';
-    document.getElementById('tissue_ratio').textContent = TR.toFixed(2);
-    const riskChip = document.getElementById('dcs_risk_chip');
-    riskChip.innerHTML = `<span class="${risk.cls}">DCS risk: ${risk.label}</span>`;
     } 
 
   // Mode change: set ΔP by mode, then recompute
