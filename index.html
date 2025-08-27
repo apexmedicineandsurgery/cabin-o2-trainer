@@ -137,7 +137,7 @@
           <!-- Auto‑PaCO₂ toggle -->
           <div class="inline">
             <input type="checkbox" id="auto_paco2" checked />
-            <label for="auto_paco2">Auto‑PaCO₂ from cabin altitude estimating hypoxic ventilatory response</label>
+            <label for="auto_paco2">Auto‑PaCO₂ estimating hypoxic ventilatory response</label>
           </div>
 
           <div class="row">
@@ -440,6 +440,33 @@
   function calcPIO2_mmHg(Ptotal_mmHg, FiO2){ const PH2O = 47; return Math.max(0, (Ptotal_mmHg - PH2O) * FiO2); }
   function calcPAO2_mmHg(Ptotal_mmHg, FiO2, PaCO2, RQ){ return Math.max(0, calcPIO2_mmHg(Ptotal_mmHg, FiO2) - (PaCO2 / RQ)); }
 
+  // --- New PaCO2-from-PaO2 hypoxic ventilatory response model ---
+  function paco2FromPaO2_mmHg(PaO2){
+    if (!Number.isFinite(PaO2)) return 40;
+    const HI = 40;   // normocapnia
+    const LO = 28;   // strong HVR
+    const MID = 60;  // knee
+    const K = 0.12;  // steepness
+    const g = 1 / (1 + Math.exp(-K * (PaO2 - MID)));
+    return LO + (HI - LO) * g;
+  }
+
+  function solveGasWithHVR(Pinspired_mmHg, FiO2, RQ){
+    let PaCO2 = 40;
+    const iters = 8, alpha = 0.35;
+    let PIO2, PAO2, PaO2;
+    for (let i = 0; i < iters; i++){
+      PIO2 = calcPIO2_mmHg(Pinspired_mmHg, FiO2);
+      PAO2 = Math.max(0, PIO2 - (PaCO2 / RQ));
+      PaO2 = estimatePaO2_from_PAO2(PAO2);
+      const target = paco2FromPaO2_mmHg(PaO2);
+      const updated = alpha*target + (1-alpha)*PaCO2;
+      if (Math.abs(updated - PaCO2) < 0.1){ PaCO2 = updated; break; }
+      PaCO2 = updated;
+    }
+    return { PIO2, PAO2, PaO2, PaCO2 };
+  }
+
   // Auto-estimate PaCO2 from cabin altitude (feet) to reflect HVR
   function estimatePaCO2_mmHg_from_altFt(altFt){
     const Pa = 40 - (10 * (altFt / 14000)); // 40 -> 30 by 14k ft
@@ -555,17 +582,22 @@
     const mask_over_mmHg = clamp(parseFloat(el('mask_over_mmHg').value), 0, 300);
     const RQ = clamp(parseFloat(el('rq').value), 0.7, 1.0);
 
-    // Toggle: auto‑PaCO2 from cabin altitude (HVR) or manual from UI
     const useAutoHVR = el('auto_paco2').checked;
-    const PaCO2 = useAutoHVR
-    ? estimatePaCO2_mmHg_from_altFt(cab_alt_ft)
-    : clamp(parseFloat(el('paco2').value), 20, 60);
-
-    // If auto mode is on, reflect the live‑computed value in the box
-    if (useAutoHVR) {
+    let PaCO2, PIO2, PAO2;
+    if (useAutoHVR){
+      // Use PaO₂-driven fixed-point model
+      let Pinspired_mmHg = Pcab_mmHg;
+      if (o2_mode === "pressure") Pinspired_mmHg += mask_over_mmHg;
+      const sol = solveGasWithHVR(Pinspired_mmHg, FiO2, RQ);
+      ({ PIO2, PAO2, PaCO2 } = sol);
       el('paco2').value = fmt(PaCO2, 1);
       el('paco2').disabled = true;
     } else {
+      PaCO2 = clamp(parseFloat(el('paco2').value), 20, 60);
+      let Pinspired_mmHg = Pcab_mmHg;
+      if (o2_mode === "pressure") Pinspired_mmHg += mask_over_mmHg;
+      PIO2 = calcPIO2_mmHg(Pinspired_mmHg, FiO2);
+      PAO2 = calcPAO2_mmHg(Pinspired_mmHg, FiO2, PaCO2, RQ);
       el('paco2').disabled = false;
     }
 
@@ -574,13 +606,7 @@
     const dP_psi = dP_Pa / PA_PER_PSI;
     const dP_mmhg = dP_Pa / PA_PER_MMHG;
 
-    // Inspired total pressure for gas calcs
-    let Pinspired_mmHg = Pcab_mmHg;
-    if (o2_mode === "pressure") Pinspired_mmHg = Pcab_mmHg + mask_over_mmHg;
-
     // Gas/physiology
-    const PIO2 = calcPIO2_mmHg(Pinspired_mmHg, FiO2);
-    const PAO2 = calcPAO2_mmHg(Pinspired_mmHg, FiO2, PaCO2, RQ);
     const SpO2 = spo2FromPAO2(PAO2);
 
     // Boyle’s
