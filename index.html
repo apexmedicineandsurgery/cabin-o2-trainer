@@ -130,14 +130,23 @@
           <input id="mask_over_mmHg" type="number" value="0" min="0" max="200" step="1" />
           <div class="inline muted">Pressure-demand only</div>
         </div>
+        <!-- Inside your Controls card -->
         <div>
           <label for="paco2">PaCO₂ (mmHg) · RQ</label>
+
+          <!-- Auto‑PaCO₂ toggle -->
+          <div class="inline">
+            <input type="checkbox" id="auto_paco2" checked />
+            <label for="auto_paco2">Auto‑PaCO₂ from cabin altitude estimating hypoxic ventilatory response</label>
+          </div>
+
           <div class="row">
             <div><input id="paco2" type="number" value="40" min="20" max="60" step="1" /></div>
             <div><input id="rq" type="number" value="0.8" min="0.7" max="1.0" step="0.05" /></div>
           </div>
           <div class="inline muted">Alveolar gas equation parameters</div>
         </div>
+
       </div>
     </section>
 
@@ -192,7 +201,7 @@
         <!-- NEW: TUC chips -->
         <div class="status-chip" id="hypoxia_chip" style="display:none">
           <span class="danger">HYPOXIA</span>
-          <span>Increase FiO₂ or cabin pressure</span>
+          <span>Increase FiO₂, cabin pressure, or mask overpressurization</span>
         </div>
 
         <div class="status-chip">
@@ -431,9 +440,38 @@
   function calcPIO2_mmHg(Ptotal_mmHg, FiO2){ const PH2O = 47; return Math.max(0, (Ptotal_mmHg - PH2O) * FiO2); }
   function calcPAO2_mmHg(Ptotal_mmHg, FiO2, PaCO2, RQ){ return Math.max(0, calcPIO2_mmHg(Ptotal_mmHg, FiO2) - (PaCO2 / RQ)); }
 
-  // Estimated SpO2 from PAO2 (illustrative sigmoid)
-  function spo2FromPAO2(PAO2){
-    const s = 100/(1+Math.exp(-(PAO2-55)/8));
+  // Auto-estimate PaCO2 from cabin altitude (feet) to reflect HVR
+  function estimatePaCO2_mmHg_from_altFt(altFt){
+    const Pa = 40 - (10 * (altFt / 14000)); // 40 -> 30 by 14k ft
+    return clamp(Pa, 28, 40);
+  }
+
+  // Gentler A–a gradient for healthy rest
+  function estimateAaGradient_mmHg(PAO2_mmHg){
+    return Math.max(5, 0.03 * PAO2_mmHg); // 3% of PAO2 with 5 mmHg minimum
+  }
+
+  // Estimate PaO2 from PAO2 with a simple A–a gradient model (training-grade)
+  function estimatePaO2_from_PAO2(PAO2_mmHg){
+  if (!Number.isFinite(PAO2_mmHg)) return NaN;
+  const AA = estimateAaGradient_mmHg(PAO2_mmHg);
+  return Math.max(0, PAO2_mmHg - AA);
+  }
+
+  // Hill equation SaO2(PaO2) at standard conditions
+  function saO2_from_PaO2(PaO2_mmHg){
+    if (!Number.isFinite(PaO2_mmHg)) return NaN;
+    const n = 2.7;
+    const P50 = 26.8; // mmHg (pH 7.4, 37°C, PaCO2 ~40)
+    const Pa_n = Math.pow(PaO2_mmHg, n);
+    const P50_n = Math.pow(P50, n);
+    return 100 * (Pa_n / (Pa_n + P50_n));
+  }
+
+  // Replace: spo2FromPAO2 using A–a estimate + Hill curve
+  function spo2FromPAO2(PAO2_mmHg){
+    const PaO2 = estimatePaO2_from_PAO2(PAO2_mmHg);
+    const s = saO2_from_PaO2(PaO2);
     return clamp(s, 0, 100);
   }
 
@@ -480,8 +518,8 @@
     if (!dpInput) return;
   
     let desiredPsi;
-    if (mode === 'ramped')      desiredPsi = 9; // Commercial-style
-    else if (mode === 'jet')    desiredPsi = 3; // Jet Fighter
+    if (mode === 'ramped')      desiredPsi = 8.5; // Commercial-style
+    else if (mode === 'jet')    desiredPsi = 3.5; // Jet Fighter
     else desiredPsi = Number(dpInput.value) || 6; // Leave as-is for other modes
   
     dpInput.value = desiredPsi;
@@ -498,12 +536,6 @@
     const cabinSet_m = clamp(parseFloat(el('cabin_set_m').value), 0, 5000);
     const dPmax_psi = clamp(parseFloat(el('dPmax_psi').value), 0, 20);
 
-    const o2_mode = el('o2_mode').value;
-    const FiO2 = clamp(parseFloat(el('fio2').value), 0.21, 1.0);
-    const mask_over_mmHg = clamp(parseFloat(el('mask_over_mmHg').value), 0, 300);
-    const PaCO2 = clamp(parseFloat(el('paco2').value), 20, 60);
-    const RQ = clamp(parseFloat(el('rq').value), 0.7, 1.0);
-
     // Ambient
     const Pamb_Pa = isaPressurePa(alt_m);
     const Pamb_mmHg = Pa_to_mmHg(Pamb_Pa);
@@ -516,6 +548,26 @@
     const Pcab_psi = Pa_to_psi(Pcab_Pa);
     const cab_alt_m = pressureToAltApprox_m(Pcab_Pa);
     const cab_alt_ft = cab_alt_m * FT_PER_M;
+
+    // Gas/ventilation inputs
+    const o2_mode = el('o2_mode').value;
+    const FiO2 = clamp(parseFloat(el('fio2').value), 0.21, 1.0);
+    const mask_over_mmHg = clamp(parseFloat(el('mask_over_mmHg').value), 0, 300);
+    const RQ = clamp(parseFloat(el('rq').value), 0.7, 1.0);
+
+    // Toggle: auto‑PaCO2 from cabin altitude (HVR) or manual from UI
+    const useAutoHVR = el('auto_paco2').checked;
+    const PaCO2 = useAutoHVR
+    ? estimatePaCO2_mmHg_from_altFt(cab_alt_ft)
+    : clamp(parseFloat(el('paco2').value), 20, 60);
+
+    // If auto mode is on, reflect the live‑computed value in the box
+    if (useAutoHVR) {
+      el('paco2').value = fmt(PaCO2, 1);
+      el('paco2').disabled = true;
+    } else {
+      el('paco2').disabled = false;
+    }
 
     // ΔP
     const dP_Pa = Math.max(0, Pcab_Pa - Pamb_Pa);
@@ -603,12 +655,12 @@
   }
 
   // Wire inputs
-  [ 'alt_m', 'cabin_set_m', 'dPmax_psi', 'o2_mode', 'fio2', 'mask_over_mmHg', 'paco2', 'rq' ].forEach(id => {
-    const node = document.getElementById(id);
-    if (node){
-      node.addEventListener('input', update);
-      node.addEventListener('change', update);
-    }
+  [ 'alt_m', 'cabin_set_m', 'dPmax_psi', 'o2_mode', 'fio2', 'mask_over_mmHg', 'paco2', 'rq', 'auto_paco2' ].forEach(id => {
+  const node = document.getElementById(id);
+  if (node){
+    node.addEventListener('input', update);
+    node.addEventListener('change', update);
+  }
   });
 
   // Guarded (optional) listeners if elements exist
