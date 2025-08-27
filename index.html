@@ -188,11 +188,26 @@
           <span class="strong" id="spo2_val">98 %</span>
           <span class="muted">Display estimate from PAO₂</span>
         </div>
+
+        <!-- NEW: TUC chips -->
         <div class="status-chip" id="hypoxia_chip" style="display:none">
           <span class="danger">HYPOXIA</span>
           <span>Increase FiO₂ or cabin pressure</span>
         </div>
-        <div class="note">Calculations use cabin pressure plus mask overpressure when in pressure‑demand mode. PH₂O = 47 mmHg.</div>
+
+        <div class="status-chip">
+        <span class="mono">TUC normal</span>
+        <span class="strong" id="tuc_normal">—</span>
+        <span class="muted">Based on selected altitude</span>
+        </div>
+        <div class="status-chip">
+          <span class="mono">TUC rapid decompression</span>
+          <span class="strong" id="tuc_rapid">—</span>
+          <span class="muted">Assumed 0.5 × normal</span>
+        </div>
+
+        
+        <div class="note">Calculations use cabin pressure plus mask overpressure when in pressure‑demand mode. PH₂O = 47 mmHg. TUC model is illustrative for training.</div>
       </div>
     </section>
 
@@ -213,7 +228,6 @@
         </div>
       </div>
     </section>
-
 
     
     <!-- Boyle’s law -->
@@ -273,8 +287,6 @@
         </svg>
       </div>
 
-
-      
       <div class="note">Computed as P₀ / P, where P₀ = 760 mmHg.</div>
       </section>
 
@@ -291,15 +303,20 @@
 <script>
   // ---------- Constants and helpers ----------
   const FT_PER_M = 3.280839895;
-  function ft_to_m(feet) {
-  return feet * 0.3048; // 1 ft = 0.3048 m
-  }
+  function ft_to_m(feet) { return feet * 0.3048; }
 
   const PA_PER_PSI = 6894.75729;
   const PA_PER_MMHG = 133.3223684211;
   const P0_PA = 101325;
   const P0_MMHG = P0_PA / PA_PER_MMHG;
 
+  // NEW: TUC model constants (exponential fit; altitude in ft, TUC in minutes)
+  // Tuned to typical FAA table averages: ~25 min @ 18k, ~10 @ 22k, ~4 @ 25k, ~0.3 @ 40k.
+  const TUC_T0_MIN = 25;      // baseline TUC at reference altitude
+  const TUC_REF_FT = 18000;   // reference altitude
+  const TUC_K = 0.000183;     // decay per foot
+  const TUC_MAX_MIN = 30;     // cap display to 30 min for UI
+  const TUC_LOWALT_FT = 10000;// below this, show ≥30 min for normal
 
   // --- Boyle's Law visual updater ---
   function updateBoyleVisuals(relCabin, relAmbient) {
@@ -308,24 +325,13 @@
     const ambientEl  = document.getElementById("ambientCircle");
     if (!cabinEl || !baselineEl || !ambientEl) return;
   
-    // Sea-level bubble radius (must match the baselineCircle r in the SVG)
     const baseR = 32;
-  
-    // Clamp multipliers to avoid disappearing dots or runaway circles
-    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-    const vc = clamp(relCabin,   0.2, 6.0);
-    const va = clamp(relAmbient, 0.2, 6.0);
-  
-    // Make circle AREA track “volume multiple” => radius ∝ sqrt(volume multiple)
+    const clampLocal = (v, min, max) => Math.max(min, Math.min(max, v));
+    const vc = clampLocal(relCabin,   0.2, 6.0);
+    const va = clampLocal(relAmbient, 0.2, 6.0);
     const rFromV = v => baseR * Math.sqrt(v);
-  
-    // Middle: fixed sea-level
     baselineEl.setAttribute("r", String(baseR));
-  
-    // Left: cabin (dynamic)
     cabinEl.setAttribute("r", String(rFromV(vc)));
-  
-    // Right: ambient (dynamic)
     ambientEl.setAttribute("r", String(rFromV(va)));
   }
   
@@ -399,7 +405,6 @@
   }
 
   // Commercial schedule (3 phases):
-  // 1) From sea level, cabin pressure changes 1/4 as much as ambient (toward ambient),
   if (mode === "ramped") {
     const Pquarter = P0 + 0.5 * (Pamb - P0);
     const reachedSet = Pquarter <= Pset;
@@ -411,7 +416,6 @@
         const dP_now = Pset - Pamb;
 
         if (dP_now <= dPmax_Pa) {
-            // Phase 2: hold at set cabin altitude *but check each loop*
             Pcabin = Pset;
             segment = "Holding at set cabin altitude";
         } else {
@@ -422,8 +426,6 @@
     return { Pcabin, segment };
   }
 }
-
-
 
   // O2 calculations
   function calcPIO2_mmHg(Ptotal_mmHg, FiO2){ const PH2O = 47; return Math.max(0, (Ptotal_mmHg - PH2O) * FiO2); }
@@ -437,6 +439,27 @@
 
   // Boyle’s relative volume vs sea level
   function boyleRelVolume(P_mmHg){ return (Number.isFinite(P_mmHg) && P_mmHg>0) ? (760 / P_mmHg) : NaN; }
+
+  // NEW: TUC from cabin altitude (feet) in minutes
+  function tucMinutesFromAltFt(altFt){
+    if (!Number.isFinite(altFt)) return NaN;
+    if (altFt < TUC_LOWALT_FT) return Infinity; // effectively ≥ 30 min for training UI
+    const mins = TUC_T0_MIN * Math.exp(-TUC_K * (altFt - TUC_REF_FT));
+    return Math.max(0, mins);
+  }
+  // NEW: format TUC minutes to friendly string
+  function formatTUC(mins){
+    if (!Number.isFinite(mins)) return "—";
+    if (mins === Infinity) return `≥ ${TUC_MAX_MIN} min`;
+    const capped = Math.min(mins, TUC_MAX_MIN);
+    const totalSec = Math.max(1, Math.round(capped*60));
+    if (totalSec >= 60){
+      const m = Math.floor(totalSec/60);
+      const s = totalSec % 60;
+      return `${m} min ${String(s).padStart(2,"0")} s`;
+    }
+    return `${totalSec} s`;
+  }
 
   // Mask overpressure status
   function maskStatusLabel(over_mmHg, mode){
@@ -470,6 +493,7 @@
 
     // Inputs
     const alt_m = clamp(parseFloat(el('alt_m').value), 0, 30000);
+    const sel_alt_ft = alt_m * FT_PER_M; // selected aircraft altitude in feet
     const mode = el('press_profile').value;
     const cabinSet_m = clamp(parseFloat(el('cabin_set_m').value), 0, 5000);
     const dPmax_psi = clamp(parseFloat(el('dPmax_psi').value), 0, 20);
@@ -511,6 +535,18 @@
     const boyleCab = boyleRelVolume(Pcab_mmHg);
     const boyleAmb = boyleRelVolume(Pamb_mmHg);
 
+    // TUC based on selected altitude (aircraft), not cabin
+    const tucMin = tucMinutesFromAltFt(sel_alt_ft);
+    const tucRapidMin = (tucMin === Infinity) ? Infinity : (tucMin / 2);
+
+    const tucNormalStr = (tucMin === Infinity)
+    ? `≥ ${TUC_MAX_MIN} min`
+    : formatTUC(tucMin);
+
+    const tucRapidStr = (tucRapidMin === Infinity)
+    ? `≥ ${TUC_MAX_MIN} min`  // match normal cap below the low-alt threshold
+    : formatTUC(tucRapidMin);
+
     // UI writes
     el('alt_ft').textContent = fmtInt(alt_m * FT_PER_M) + " ft";
     el('cabin_set_ft').textContent = fmtInt(cabinSet_m * FT_PER_M) + " ft";
@@ -535,10 +571,16 @@
     el('spo2_val').textContent = fmt(SpO2, 0) + " %";
     el('hypoxia_chip').style.display = (SpO2 < 90) ? "" : "none";
 
+    // Write TUC chips
+    const tn = document.getElementById('tuc_normal');
+    const tr = document.getElementById('tuc_rapid');
+    if (tn) tn.textContent = tucNormalStr;
+    if (tr) tr.textContent = tucRapidStr;
+
     el('boyle_cabin').textContent = fmt(boyleCab, 2) + " ×";
     el('boyle_ambient').textContent = fmt(boyleAmb, 2) + " ×";
     
-    // NEW: animate the Boyle's Law balloons
+    // animate the Boyle's Law balloons
     updateBoyleVisuals(boyleCab, boyleAmb);
     
     // Mask status
@@ -555,21 +597,25 @@
   const modeSelect = document.getElementById('press_profile');
   if (modeSelect) {
     modeSelect.addEventListener('change', (e) => {
-      setDpMaxForMode(e.target.value); // sets 8 psi for commercial-style, 4 psi for jet
-      update();                         // recompute with the new ΔP
+      setDpMaxForMode(e.target.value);
+      update();
     });
   }
 
   // Wire inputs
   [ 'alt_m', 'cabin_set_m', 'dPmax_psi', 'o2_mode', 'fio2', 'mask_over_mmHg', 'paco2', 'rq' ].forEach(id => {
-  const node = document.getElementById(id);
-  node.addEventListener('input', update);
-  node.addEventListener('change', update);
+    const node = document.getElementById(id);
+    if (node){
+      node.addEventListener('input', update);
+      node.addEventListener('change', update);
+    }
   });
 
-
-  document.getElementById('n2_init_preset').addEventListener('input', update);
-  document.getElementById('n2_init_mmHg').addEventListener('input', update);
+  // Guarded (optional) listeners if elements exist
+  const n2Preset = document.getElementById('n2_init_preset');
+  if (n2Preset) n2Preset.addEventListener('input', update);
+  const n2Init = document.getElementById('n2_init_mmHg');
+  if (n2Init) n2Init.addEventListener('input', update);
 
   // Apply mode-specific ΔP before the first render
   (function initDpByMode() {
@@ -577,9 +623,8 @@
     if (modeSel) setDpMaxForMode(modeSel.value);
   })();
 
-  // Initial render (defaults to Failed mode and FiO2 = 0.21)
+  // Initial render
   update();
 </script>
 </body>
 </html>
-```
